@@ -11,10 +11,14 @@
 # Env: REF (reference vasm), NEW (vasm_m), FORMATS ("bin hunk"), OUT (out dir).
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+# REF/NEW/OUT may be given relative to the launch directory; make them absolute
+# before any cd (cubedroid.sh runs from the project directory).
+abs() { case "$1" in /*) printf '%s\n' "$1";; *) printf '%s/%s\n' "$PWD" "$1";; esac; }
 REF="${REF:-$ROOT/vasm-1.7h/vasmm68k_mot}"
 NEW="${NEW:-$ROOT/target/release/vasm_m}"
 FORMATS="${FORMATS:-bin}"
 OUT="${OUT:-$ROOT/target/diff}"
+REF=$(abs "$REF"); NEW=$(abs "$NEW"); OUT=$(abs "$OUT")
 COMMON="-quiet -m68000"
 
 [ -x "$REF" ] || { echo "reference vasm not built: make -C vasm-1.7h -f Makefile.macOS CPU=m68k SYNTAX=mot"; exit 2; }

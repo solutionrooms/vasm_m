@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Cross-platform differential test (mirrors tests/diff.sh and tests/cubedroid.sh).
 
-Usage:  python3 tests/diff.py [--ref PATH] [--new PATH] [--formats bin] [--cubedroid] [--corpus-only]
+Usage:  python3 tests/diff.py [--ref PATH] [--new PATH] [--out DIR] [--formats bin] [--cubedroid] [--corpus-only]
+
+Paths may be relative to the directory you launch from. Concurrent runs must use
+distinct --out directories (the default target/diff is shared).
 
 Positive corpus cases (tests/corpus/NAME.s) must exit 0 on both assemblers and
 produce identical bytes; negative cases (NAME.expect-fail present) must exit 1 on
@@ -31,12 +34,14 @@ def main():
     ap.add_argument("--cubedroid", action="store_true", help="also run the full-ROM gate")
     ap.add_argument("--corpus-only", action="store_true")
     a = ap.parse_args()
-    ref, new = Path(a.ref), Path(a.new)
+    # Resolve every user-supplied path against the launch directory before any
+    # subprocess runs with a different cwd (the CubeDroid step uses cwd=proj).
+    ref, new = Path(a.ref).resolve(), Path(a.new).resolve()
     if not ref.is_file():
         sys.exit(f"reference vasm not built: {ref}")
     if not new.is_file():
         sys.exit(f"vasm_m not built: {new} (cargo build --release)")
-    out = Path(a.out) / "corpus"
+    out = Path(a.out).resolve() / "corpus"
     if out.exists():
         for f in out.iterdir():
             if f.is_file():

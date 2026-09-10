@@ -3,9 +3,13 @@
 # against reference vasm 1.7h (raw assembler output, before the ROM padder).
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+# REF/NEW/OUT may be given relative to the launch directory; make them absolute
+# before any cd (cubedroid.sh runs from the project directory).
+abs() { case "$1" in /*) printf '%s\n' "$1";; *) printf '%s/%s\n' "$PWD" "$1";; esac; }
 REF="${REF:-$ROOT/vasm-1.7h/vasmm68k_mot}"
 NEW="${NEW:-$ROOT/target/release/vasm_m}"
 OUT="${OUT:-$ROOT/target/cubedroid}"
+REF=$(abs "$REF"); NEW=$(abs "$NEW"); OUT=$(abs "$OUT")
 PROJ="$ROOT/AssemblyTest/CubeDroid"
 [ -x "$REF" ] || { echo "reference vasm not built"; exit 2; }
 [ -x "$NEW" ] || { echo "vasm_m not built: cargo build --release"; exit 2; }

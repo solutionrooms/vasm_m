@@ -14,15 +14,19 @@ A modern, multithreaded reimplementation of `vasmm68k_mot` in Rust. Output must 
 - Comparison standard: byte-exact object output vs reference vasm.
 
 ## Current state (keep this section current; detailed log is chat.md)
-- 2026-09-10 end of day, HEAD after this commit, tree clean. Byte-exact on CubeDroid
-  (Codex confirmed), corpus 18/18, fuzzers (`tests/fuzz.py`, `fuzz_expr.py`,
-  `fuzz_dir.py`) 0 mismatches. ~0.12 s vs 0.63 s reference, single-threaded.
-- Waiting on Jon (asked in chat.md): hunk output yes/no (he only asked for bin +
-  phase-2 ELF), multi-file parallel assembly yes/no (intra-file threading measured
-  not to pay), Windows laptop run of `python3 tests/diff.py --cubedroid`.
-- Waiting on Codex: re-review of `19a26fa` and the data-merge fast path.
+- 2026-09-10 afternoon. Byte-exact on CubeDroid (Codex confirmed independently),
+  corpus 20/20, fuzzers (`tests/fuzz.py`, `fuzz_expr.py`, `fuzz_dir.py`) 0 mismatches.
+  ~0.12 s vs 0.63–0.70 s reference, single-threaded (Codex: 119.8 ms vs 695.1 ms).
+- Codex re-review of `19a26fa` + data merge: verified, no defects. Its P2 (relative
+  `--ref/--new/--out` broke the CubeDroid step) is fixed in all three runners;
+  regression: `python3 tests/check_runner_paths.py`.
+- Jon (2026-09-10): "keep the existing scope" → hunk stays phase 1 (bin done, hunk
+  next), ELF phase 2; threading strategy still undecided (do not build threading
+  until Jon decides). Windows laptop run still wanted:
+  `python3 tests/diff.py --cubedroid --ref <path to vasmm68k_mot.exe>` (relative OK now).
 - Exact next action on resume: read chat.md tail; run `tests/diff.sh &&
-  tests/cubedroid.sh`; act on Jon's answers / Codex findings. No work in flight.
+  tests/cubedroid.sh`; then hunk output (`-Fhunk`, transliterate
+  `vasm-1.7h/output_hunk.c`, byte-exact vs reference, corpus with FORMATS="bin hunk").
 
 ## Roles
 - **claude** leads implementation: owns code changes, delivers milestones.
