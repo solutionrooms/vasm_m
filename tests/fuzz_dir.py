@@ -28,24 +28,36 @@ class Gen:
     def sep(self):
         return ", " if (self.spaces and self.r.random() < 0.5) else ","
 
-    def value(self):
+    def cvalue(self):
+        """constant-only value (no labels)"""
         k = self.r.random()
-        if k < 0.4: return str(self.r.choice([0, 1, 2, 3, 4, 7, 8, 15, 16, 100, 127, 128, 255, 256, 1000, 32767, 32768, 65535]))
-        if k < 0.6: return "$" + format(self.r.randrange(0, 0x10000), "x")
-        if k < 0.7 and self.equs: return self.r.choice(self.equs)
-        if k < 0.8 and self.sets: return self.r.choice(self.sets)
-        if k < 0.9 and self.labels: return self.r.choice(self.labels)
-        if k < 0.95 and len(self.labels) >= 2:
-            a, b = self.r.sample(self.labels, 2); return f"({a}-{b})"
+        if k < 0.45: return str(self.r.choice([0, 1, 2, 3, 4, 7, 8, 15, 16, 100, 127, 128, 255, 256, 1000, 32767, 32768, 65535]))
+        if k < 0.65: return "$" + format(self.r.randrange(0, 0x10000), "x")
+        if k < 0.8 and self.equs: return self.r.choice(self.equs)
+        if k < 0.9 and self.sets: return self.r.choice(self.sets)
         return "'" + self.r.choice(["A", "AB", "xyz", "QRST"]) + "'"
 
     def expr(self, depth=2):
-        if depth == 0 or self.r.random() < 0.4: return self.value()
+        """constant expression"""
+        if depth == 0 or self.r.random() < 0.4: return self.cvalue()
         op = self.r.choice(["+", "-", "*", "|", "&", "<<", ">>"])
         l, r = self.expr(depth - 1), self.expr(depth - 1)
         if op in ("<<", ">>"): r = "(" + r + "&7)"
         if self.spaces and self.r.random() < 0.4: return f"{l} {op} {r}"
         return f"{l}{op}{r}"
+
+    def lexpr(self):
+        """label-based (relocatable or label-difference) expression"""
+        if not self.labels: return self.expr()
+        k = self.r.random()
+        if k < 0.4: return self.r.choice(self.labels)
+        if k < 0.7: return f"{self.r.choice(self.labels)}+{self.r.randint(0, 16)}"
+        if k < 0.85 and len(self.labels) >= 2:
+            a, b = self.r.sample(self.labels, 2); return f"({a}-{b})"
+        return f"{self.r.choice(self.labels)}-{self.r.randint(0, 16)}"
+
+    def value(self):
+        return self.cvalue()
 
     def emit(self, s): self.out.append(s)
 
@@ -65,6 +77,10 @@ class Gen:
         for _ in range(self.r.randint(1, 6)):
             if d == "dc.b" and self.r.random() < 0.3:
                 items.append(self.r.choice(["'hello'", "'a''b'", "\"str\"", "'x'", "''"]))
+            elif d == "dc.l" and self.r.random() < 0.4:
+                items.append(self.lexpr())
+            elif d != "dc.b" and len(self.labels) >= 2 and self.r.random() < 0.2:
+                a, b = self.r.sample(self.labels, 2); items.append(f"{a}-{b}")
             else:
                 e = self.expr()
                 if d == "dc.b": e = f"({e})&$ff"
@@ -84,7 +100,11 @@ class Gen:
 
     def equ(self):
         name = self.fresh("E")
-        self.emit(f"{name}\t{self.r.choice(['equ', 'EQU', '='])}\t{self.expr()}")
+        if self.r.random() < 0.15 and len(self.labels) >= 2:
+            a, b = self.r.sample(self.labels, 2)
+            self.emit(f"{name}\t{self.r.choice(['equ', 'EQU', '='])}\t{a}-{b}")
+        else:
+            self.emit(f"{name}\t{self.r.choice(['equ', 'EQU', '='])}\t{self.expr()}")
         self.equs.append(name)
 
     def setsym(self):
@@ -146,6 +166,7 @@ class Gen:
         elif k < 0.7: self.emit(f"\tlea\t{tgt}{self.r.choice(['', '(pc)'])},a{self.r.randint(0, 6)}")
         elif k < 0.85: self.emit(f"\tmove.{self.r.choice('wl')}\t{tgt}{self.r.choice(['', '(pc)'])},d{self.r.randint(0, 7)}")
         else: self.emit(f"\tmove.l\t#{tgt}{self.r.choice(['', '+2', '-' + (self.labels[0] if self.labels else '0')])},d{self.r.randint(0, 7)}")
+        # (a local label difference stays relocatable-safe: same section)
 
     def star(self):
         self.emit(f"\tdc.l\t*" if self.r.random() < 0.5 else f"{self.fresh('P')}\tequ\t*-{self.labels[0] if self.labels else '0'}")
