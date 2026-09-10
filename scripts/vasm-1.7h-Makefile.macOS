@@ -1,0 +1,16 @@
+# macOS (Apple clang) for vasm 1.7h
+CC = cc
+TARGET =
+TARGETEXTENSION =
+OUTFMTS = -DOUTAOUT -DOUTBIN -DOUTELF -DOUTHUNK -DOUTSREC -DOUTTOS -DOUTVOBJ
+
+CCOUT = -o 
+COPTS = -c -O2 -std=gnu89 -Wno-parentheses -Wno-embedded-directive -Wno-constant-conversion $(OUTFMTS)
+
+LD = $(CC)
+LDOUT = $(CCOUT)
+LDFLAGS = -lm
+
+RM = rm -f
+
+include make.rules

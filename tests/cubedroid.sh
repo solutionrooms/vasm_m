@@ -10,8 +10,9 @@ REF="${REF:-$ROOT/vasm-1.7h/vasmm68k_mot}"
 NEW="${NEW:-$ROOT/target/release/vasm_m}"
 OUT="${OUT:-$ROOT/target/cubedroid}"
 REF=$(abs "$REF"); NEW=$(abs "$NEW"); OUT=$(abs "$OUT")
-PROJ="$ROOT/AssemblyTest/CubeDroid"
-[ -x "$REF" ] || { echo "reference vasm not built"; exit 2; }
+PROJ="${PROJ:-$ROOT/AssemblyTest/CubeDroid}"
+[ -x "$REF" ] || { echo "reference vasm not found: $REF (run scripts/get_reference.sh or set REF)"; exit 2; }
+[ -f "$PROJ/SourceCode/stub.X68" ] || { echo "CubeDroid project not found: $PROJ (not in git; copy AssemblyTest/ into the repo root or set PROJ)"; exit 2; }
 [ -x "$NEW" ] || { echo "vasm_m not built: cargo build --release"; exit 2; }
 rm -rf "$OUT" && mkdir -p "$OUT" || exit 2
 cd "$PROJ" || exit 2

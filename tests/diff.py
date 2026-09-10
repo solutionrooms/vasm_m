@@ -34,13 +34,16 @@ def main():
     ap.add_argument("--formats", default="bin hunk")
     ap.add_argument("--out", default=str(ROOT / "target" / "diff"))
     ap.add_argument("--cubedroid", action="store_true", help="also run the full-ROM gate")
+    ap.add_argument("--project", default=str(ROOT / "AssemblyTest" / "CubeDroid"),
+                    help="CubeDroid project directory (not in git; default AssemblyTest/CubeDroid under the repo root)")
     ap.add_argument("--corpus-only", action="store_true")
     a = ap.parse_args()
     # Resolve every user-supplied path against the launch directory before any
     # subprocess runs with a different cwd (the CubeDroid step uses cwd=proj).
     ref, new = Path(a.ref).resolve(), Path(a.new).resolve()
     if not ref.is_file():
-        sys.exit(f"reference vasm not built: {ref}")
+        sys.exit(f"reference vasm not found: {ref}\n"
+                 "  build it with scripts/get_reference.sh (macOS/Linux) or pass --ref <path to vasmm68k_mot(.exe)>")
     if not new.is_file():
         sys.exit(f"vasm_m not built: {new} (cargo build --release)")
     out = Path(a.out).resolve() / "corpus"
@@ -89,7 +92,10 @@ def main():
             else: failed += 1
     print(f"pass={passed} fail={failed}")
     if a.cubedroid and not a.corpus_only:
-        proj = ROOT / "AssemblyTest" / "CubeDroid"
+        proj = Path(a.project).resolve()
+        if not (proj / "SourceCode" / "stub.X68").is_file():
+            sys.exit(f"CubeDroid project not found: {proj}\n"
+                     "  it is not in git; copy AssemblyTest/ into the repo root or pass --project <dir containing SourceCode/stub.X68>")
         for fmt in ("bin", "hunk", "hunkexe"):
             rf, nf = out / f"cubedroid.ref.{fmt}", out / f"cubedroid.new.{fmt}"
             rs, rlog, rt = run([str(ref), "-quiet", f"-F{fmt}", "-spaces", "-o", str(rf), "SourceCode/stub.X68"], cwd=proj)

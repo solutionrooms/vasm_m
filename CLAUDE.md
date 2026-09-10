@@ -41,6 +41,14 @@ A modern, multithreaded reimplementation of `vasmm68k_mot` in Rust. Output must 
 - Coordinate via `chat.md` at repo root (append-only, newest at bottom, prefix
   entries with `## [claude]` / `## [codex]` and a timestamp).
 
+## Local-only trees (not in git; the public repo holds the assembler only)
+- `AssemblyTest/` (CubeDroid example + shipped Windows `vasmm68k_mot.exe`),
+  `vasm-1.7h/` and `vasm/` are gitignored. History was rewritten 2026-09-10 to drop
+  them before the first push to github.com/solutionrooms/vasm_m (Jon: public,
+  assembler only). Full pre-rewrite history is kept locally as `refs/backup/main-full`.
+- Recreate the reference with `scripts/get_reference.sh`; point tests at the example
+  project with `--project` (diff.py) / `PROJ=` (cubedroid.sh) if it lives elsewhere.
+
 ## Reference vasm — 1.7h is the byte-exact target
 - `vasm-1.7h/` is vasm **1.7h** (m68k backend 2.1c, mot syntax 3.9e), the version the
   example project ships (`AssemblyTest/Tools/VASMbin/bin/vasmm68k_mot.exe`). Source

@@ -15,3 +15,9 @@ AssemblyTest/**/obj/
 AssemblyTest/**/bin/Debug/
 AssemblyTest/**/tniasm.*
 tests/__pycache__/
+
+# Local-only trees (public repo holds the assembler only; see README "Try it")
+AssemblyTest/
+vasm-1.7h/
+vasm/
+vasm1_7h.tar.gz

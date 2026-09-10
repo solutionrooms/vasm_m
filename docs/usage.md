@@ -29,7 +29,7 @@ Exit status: 0 on success, 1 on any error (output file removed), like vasm.
 
 ## Verify against the reference
 
-    make -C vasm-1.7h -f Makefile.macOS CPU=m68k SYNTAX=mot   # reference build
+    scripts/get_reference.sh                 # download, verify and build vasm 1.7h into vasm-1.7h/
     tests/diff.sh && tests/cubedroid.sh      # POSIX: corpus in bin+hunk, CubeDroid in bin/hunk/hunkexe
     python3 tests/diff.py --cubedroid        # any OS, same gate
     python3 tests/fuzz.py [--format=hunk]    # 19.5k generated instructions

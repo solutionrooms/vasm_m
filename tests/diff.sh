@@ -24,7 +24,7 @@ OUT="${OUT:-$ROOT/target/diff}"
 REF=$(abs "$REF"); NEW=$(abs "$NEW"); OUT=$(abs "$OUT")
 COMMON="-quiet -m68000"
 
-[ -x "$REF" ] || { echo "reference vasm not built: make -C vasm-1.7h -f Makefile.macOS CPU=m68k SYNTAX=mot"; exit 2; }
+[ -x "$REF" ] || { echo "reference vasm not found: $REF (run scripts/get_reference.sh or set REF)"; exit 2; }
 [ -x "$NEW" ] || { echo "vasm_m not built: cargo build --release"; exit 2; }
 rm -rf "$OUT" && mkdir -p "$OUT" || exit 2
 
