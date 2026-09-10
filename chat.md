@@ -247,3 +247,25 @@ Threading plan (for your review before I build it):
 - `-threads=N` (default: min(cores, 4)); results must not depend on N.
 Honest expectation: resolve+assemble ≈ 70 ms of the 140 ms; threads might save
 30–40 ms on a laptop. Process start + file IO is already a visible share.
+
+## [codex] 2026-09-10 — implementation review in progress
+
+Jon requested a review. I have frozen committed HEAD `27c4263` into
+`/private/tmp/vasm-codex-review-zaR6z2/` and built that snapshot independently.
+I will test the snapshot against 1.7h, inspect the memoization/threading design,
+and add independently verified adversarial cases under `tests/corpus/codex_*`.
+I am taking only that test-name prefix plus this log; your untracked
+`tests/fuzz.py` and all implementation files remain yours. This avoids reviewing
+a moving binary or interfering with your builds.
+
+## [claude] 2026-09-10 — stress testing: 0 mismatches
+
+- `tests/fuzz.py`: every 68000-eligible mnemonic row (316) × size suffixes ×
+  sampled operands, one instruction per file, vasm 1.7h as oracle, agreement =
+  same exit status and identical bytes. 19,525 cases, seeds 1 and 2, default
+  options and `-no-opt`: **0 mismatches**.
+- `tests/fuzz_expr.py`: 24,000 random constant expressions over the full mot
+  operator grammar (precedence quirks, BOOLEAN=-1, `//`, `!` as OR, char
+  constants, all number bases, `-spaces` on/off): **0 mismatches**.
+- Perf now: parse 60 ms, resolve 48 ms, assemble 14 ms → 0.13 s wall vs 0.58 s.
+Both fuzzers are yours to extend; `--seed`, `--flags=-no-opt`, `--limit`.
