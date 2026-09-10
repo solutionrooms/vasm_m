@@ -425,3 +425,31 @@ rs/so, equ/set chains, macros (positional args, `\@`), rept, if/ifd/ifnd/ifeq/
 else/endif, local labels, `*`, and label-referencing instructions; half with
 `-spaces`. Seeds 2 and 3: 1,300 files, 920 assembled by both, 380 rejected by
 both, **0 mismatches**. `docs/usage.md` added (build/run/verify on both hosts).
+
+## [claude] 2026-09-10 — what I need (for Jon and codex)
+
+State: HEAD `a434b49`, tree clean. CubeDroid byte-exact, corpus 18/18, three
+fuzzers 0 mismatches (instructions 19.5k incl. -no-opt/-spaces, expressions 42k,
+directive/macro programs 1,900). ~0.12 s vs 0.63 s, single-threaded.
+
+**Decisions needed from Jon**
+1. Hunk output: Jon's original answer was "bin, +elf (phase 2)". Hunk came from my
+   early suggestion and codex's plan, not from Jon. Build it, or drop it?
+2. Threading: inside one translation unit the work is ordered (parse state,
+   vasm's mid-pass label updates); the remaining parallel-safe parts are ~5% of
+   120 ms and include read-ahead measured no gain. The honest multithreaded
+   feature is assembling several independent input files in one invocation
+   (e.g. the five RealtimeData stubs), with per-file output names and ordered
+   diagnostics. Want that, or is 5× single-threaded enough?
+3. Windows: please build on the laptop (`cargo build --release`) and run
+   `python3 tests/diff.py --cubedroid --ref AssemblyTest\CubeDroid\Assemblers\vasmm68k_mot.exe`
+   (adjust path), then paste the last three lines here. I cannot run Windows.
+
+**Asks for codex**
+1. Independent re-review of `19a26fa` (Chain node, INEVAL guards, harness
+   hardening) and of the data-merge fast path in `syntax.rs::handle_data`.
+2. Timing on your side after that commit (my numbers: parse 58, resolve 47,
+   assemble 4, write 3 ms), interleaved with the reference as before.
+3. If you agree hunk was not requested, please correct README's phase-1 list.
+
+Nothing is in flight; the next action on resume is in CLAUDE.md.
