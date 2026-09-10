@@ -29,47 +29,60 @@ The repository holds the assembler only. Two things are deliberately not in git:
   downloads the pinned tarball, verifies its SHA-256 and builds
   `vasm-1.7h/vasmm68k_mot`; on Windows the example project ships
   `vasmm68k_mot.exe`, which is the reference;
-- the CubeDroid example project (`AssemblyTest/`): copy your local folder into
-  the repo root, or point the runner at it with `--project`.
+- the CubeDroid example project: point the runner at your copy with
+  `--project` (or place it at `AssemblyTest/CubeDroid` under the repo root, the
+  default).
 
 ### Windows
 
-1. Install Rust from https://rustup.rs (`rustup-init.exe`). The default MSVC
-   toolchain needs Visual Studio Build Tools with the "Desktop development with
-   C++" workload; choose the GNU toolchain during setup if you prefer not to
-   install that. Python 3 is needed for the test runner.
-2. Build:
+You need: Git for Windows, Python 3 (from python.org, tick "Add to PATH"), and
+your existing CubeDroid project folder on the laptop (it contains the reference
+assembler at `CubeDroid\Assemblers\vasmm68k_mot.exe`). All commands below are
+for PowerShell.
+
+1. Install Rust: run `rustup-init.exe` from https://rustup.rs. If you do not
+   have Visual Studio installed, choose **Customize installation** and set the
+   default host triple to `x86_64-pc-windows-gnu`; otherwise accept the defaults
+   (MSVC, which needs the "Desktop development with C++" build tools). Close and
+   reopen PowerShell afterwards so `cargo` is on the PATH.
+2. Get and build the assembler:
 
    ```
+   git clone https://github.com/solutionrooms/vasm_m.git
+   cd vasm_m
    cargo build --release
    ```
 
-   The binary is `target\release\vasm_m.exe`.
-3. Compare against the reference on the corpus and on CubeDroid. With
-   `AssemblyTest\` copied into the repo root:
+   The binary is `target\release\vasm_m.exe` inside the clone.
+3. Compare it with the reference. Replace `C:\path\to\CubeDroid` with your
+   project folder (the one containing `SourceCode\stub.X68`):
 
    ```
-   python tests\diff.py --cubedroid --ref AssemblyTest\CubeDroid\Assemblers\vasmm68k_mot.exe
+   python tests\diff.py --cubedroid --project C:\path\to\CubeDroid --ref C:\path\to\CubeDroid\Assemblers\vasmm68k_mot.exe
    ```
 
-   or with the project elsewhere:
+   Expected last lines:
 
    ```
-   python tests\diff.py --cubedroid --project C:\path\AssemblyTest\CubeDroid --ref C:\path\AssemblyTest\CubeDroid\Assemblers\vasmm68k_mot.exe
+   pass=68 fail=0
+   cubedroid [bin]: ref exit=0 0.5xxs  new exit=0 0.1xxs
+   PASS: CubeDroid byte-exact [bin] (944216 bytes)
+   ... same for [hunk] and [hunkexe]
    ```
 
-   Expected tail: `pass=N fail=0`, then `PASS: CubeDroid byte-exact [bin]`,
-   `[hunk]` and `[hunkexe]` with a timing for each assembler. Anything else is a
-   finding: paste the whole output into `chat.md` or an issue.
-4. Use it on the game: `AssemblyTest\CubeDroid\compile.bat` runs
-   `Assemblers\vasmm68k_mot -o Output\... -Fbin -spaces SourceCode\stub.X68`;
-   substitute `vasm_m.exe` and the ROM is identical before the padder runs.
-   For a timing feel, from `AssemblyTest\CubeDroid` in PowerShell:
+   Anything else is a finding: paste the whole output into `chat.md` or an issue.
+4. Build the game with it. `CubeDroid\compile.bat` runs
+   `"Assemblers\vasmm68k_mot" -o Output\... -Fbin -spaces SourceCode\stub.X68`.
+   Copy `vasm_m.exe` into `CubeDroid\Assemblers\` and change that line to
+   `"Assemblers\vasm_m"`; the ROM is identical before the padder runs.
+5. Timing, from the CubeDroid folder:
 
    ```
-   Measure-Command { path\to\vasm_m.exe -quiet -o Output\test.bin -Fbin -spaces SourceCode\stub.X68 }
+   Measure-Command { Assemblers\vasm_m.exe -quiet -o Output\test.bin -Fbin -spaces SourceCode\stub.X68 }
    Measure-Command { Assemblers\vasmm68k_mot.exe -quiet -o Output\test.bin -Fbin -spaces SourceCode\stub.X68 }
    ```
+
+   On an M-series Mac this is about 0.11 s against 0.6 s.
 
 `tests\diff.sh` and `tests\cubedroid.sh` are POSIX only; `tests\diff.py` is the
 cross-platform runner.
