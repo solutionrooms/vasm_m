@@ -14,6 +14,90 @@ mismatch outside CubeDroid (constant-data merging changed the trimming
 granularity); fixed in the following commit, reproducer kept as
 `tests/corpus/codex_hunk_databss_merge.s`.
 
+## Try it
+
+### Get the source
+
+```sh
+git clone https://github.com/solutionrooms/vasm_m.git
+cd vasm_m
+```
+
+The repository holds the assembler only. Two things are deliberately not in git:
+
+- the reference assembler, vasm 1.7h: on macOS/Linux `scripts/get_reference.sh`
+  downloads the pinned tarball, verifies its SHA-256 and builds
+  `vasm-1.7h/vasmm68k_mot`; on Windows the example project ships
+  `vasmm68k_mot.exe`, which is the reference;
+- the CubeDroid example project: point the runner at your copy with
+  `--project` (or place it at `AssemblyTest/CubeDroid` under the repo root, the
+  default).
+
+### Windows
+
+You need: Git for Windows, Python 3 (from python.org, tick "Add to PATH"), and
+your existing CubeDroid project folder on the laptop (it contains the reference
+assembler at `CubeDroid\Assemblers\vasmm68k_mot.exe`). All commands below are
+for PowerShell.
+
+1. Install Rust: run `rustup-init.exe` from https://rustup.rs. If you do not
+   have Visual Studio installed, choose **Customize installation** and set the
+   default host triple to `x86_64-pc-windows-gnu`; otherwise accept the defaults
+   (MSVC, which needs the "Desktop development with C++" build tools). Close and
+   reopen PowerShell afterwards so `cargo` is on the PATH.
+2. Get and build the assembler:
+
+   ```
+   git clone https://github.com/solutionrooms/vasm_m.git
+   cd vasm_m
+   cargo build --release
+   ```
+
+   The binary is `target\release\vasm_m.exe` inside the clone.
+3. Compare it with the reference. Replace `C:\path\to\CubeDroid` with your
+   project folder (the one containing `SourceCode\stub.X68`):
+
+   ```
+   python tests\diff.py --cubedroid --project C:\path\to\CubeDroid --ref C:\path\to\CubeDroid\Assemblers\vasmm68k_mot.exe
+   ```
+
+   Expected last lines:
+
+   ```
+   pass=68 fail=0
+   cubedroid [bin]: ref exit=0 0.5xxs  new exit=0 0.1xxs
+   PASS: CubeDroid byte-exact [bin] (944216 bytes)
+   ... same for [hunk] and [hunkexe]
+   ```
+
+   Anything else is a finding: paste the whole output into `chat.md` or an issue.
+4. Build the game with it. `CubeDroid\compile.bat` runs
+   `"Assemblers\vasmm68k_mot" -o Output\... -Fbin -spaces SourceCode\stub.X68`.
+   Copy `vasm_m.exe` into `CubeDroid\Assemblers\` and change that line to
+   `"Assemblers\vasm_m"`; the ROM is identical before the padder runs.
+5. Timing, from the CubeDroid folder:
+
+   ```
+   Measure-Command { Assemblers\vasm_m.exe -quiet -o Output\test.bin -Fbin -spaces SourceCode\stub.X68 }
+   Measure-Command { Assemblers\vasmm68k_mot.exe -quiet -o Output\test.bin -Fbin -spaces SourceCode\stub.X68 }
+   ```
+
+   On an M-series Mac this is about 0.11 s against 0.6 s.
+
+`tests\diff.sh` and `tests\cubedroid.sh` are POSIX only; `tests\diff.py` is the
+cross-platform runner.
+
+### macOS
+
+```sh
+scripts/get_reference.sh                  # vasm 1.7h → vasm-1.7h/vasmm68k_mot (needs clang, make, curl)
+cargo build --release
+tests/diff.sh && tests/cubedroid.sh       # or: python3 tests/diff.py --cubedroid
+```
+
+`cubedroid.sh` expects `AssemblyTest/CubeDroid` under the repo root or `PROJ=<dir>`.
+See [docs/usage.md](docs/usage.md) for the supported flags and the fuzzers.
+
 ## Build and verify the new assembler
 
 With Rust installed and the reference assembler built as described below:
