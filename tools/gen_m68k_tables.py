@@ -90,8 +90,11 @@ for mm in rowpat.finditer(src):
     mn.append((name, ops, places, opc, size, avail))
 # ---- specregs ---------------------------------------------------------------
 regs = []
-for mm in re.finditer(r'"(\w+)"\s*,\s*(-?\w+)\s*,\s*([^,\n]+?)\s*,', specregs_h):
-    regs.append((mm.group(1), int(mm.group(2), 0), ev(mm.group(3))))
+specregs_clean = re.sub(r'#if 0.*?#endif', '', specregs_h, flags=re.S)
+specregs_clean = re.sub(r'/\*.*?\*/', '', specregs_clean, flags=re.S)
+for mm in re.finditer(r'"([^"]+)"\s*,\s*(-?\w+)\s*,\s*([^,\n]+?)\s*,', specregs_clean):
+    regs.append((mm.group(1), int(ev(mm.group(2)) if not mm.group(2).lstrip('-').isdigit() else int(mm.group(2), 0)), ev(mm.group(3))))
+assert len(regs) == len(regenum), (len(regs), len(regenum))
 # ---- emit -------------------------------------------------------------------
 out = []
 w = out.append

@@ -1606,7 +1606,7 @@ pub static MNEMONICS: [Mnemonic; 1227] = [
     Mnemonic { name: "", operand_type: [0, 0, 0, 0, 0, 0], place: [0, 0, 0, 0, 0, 0], opcode: [0x0000, 0x0000], size: 0x7f01, available: 0xffffffff },
 ];
 
-pub static SPECREGS: [(&str, i32, u32); 97] = [
+pub static SPECREGS: [(&str, i32, u32); 96] = [
     ("CCR", -1, 0x1f3f),
     ("SR", -1, 0x1f3f),
     ("NC", 0, 0x30),
@@ -1622,6 +1622,8 @@ pub static SPECREGS: [(&str, i32, u32); 97] = [
     ("ACCext23", 3, 0x8000),
     ("MACSR", -1, 0xc000),
     ("MASK", -1, 0xc000),
+    ("<<", 1, 0xc000),
+    (">>", 3, 0xc000),
     ("TC", 0, 0x88),
     ("SRP", 2, 0x88),
     ("CRP", 3, 0x88),
@@ -1651,9 +1653,6 @@ pub static SPECREGS: [(&str, i32, u32); 97] = [
     ("PCSR", 1, 0x80),
     ("TT0", 2, 0x8),
     ("TT1", 3, 0x8),
-    ("ACUSR", -1, 0x8),
-    ("AC0", 1, 0x8),
-    ("AC1", 3, 0x8),
     ("SFC", 0, 0x13e),
     ("DFC", 1, 0x13e),
     ("CACR", 2, 0x1e3c),
