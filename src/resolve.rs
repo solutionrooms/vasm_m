@@ -4,7 +4,7 @@ use crate::asm::Assembler;
 use crate::atoms::*;
 use crate::errors::Arg;
 use crate::expr::{Base, Expr};
-use crate::symbols::{SymKind, ABSLABEL, COMMON, EXPORT, REFERENCED, WEAK};
+use crate::symbols::{SymKind, ABSLABEL, COMMON, EXPORT, REFERENCED, UNLISTED, WEAK};
 use crate::types::Taddr;
 
 pub const MAXPASSES: i32 = 1000;
@@ -267,6 +267,7 @@ impl Assembler {
                                     size: 1,
                                     fill: [0; MAXPADBYTES],
                                     fill_exp: None,
+                                    relocs: Vec::new(),
                                     maxalignbytes: 0,
                                 }));
                             } else {
@@ -353,6 +354,9 @@ impl Assembler {
     pub fn undef_syms(&mut self) {
         for i in 0..self.symtab.syms.len() {
             let s = &self.symtab.syms[i];
+            if s.flags & UNLISTED != 0 {
+                continue;
+            }
             if !self.auto_import && s.kind == SymKind::Import && s.flags & (EXPORT | COMMON | WEAK) == 0 {
                 let n = s.name.clone();
                 self.general_error(22, &[Arg::from(n)]);
@@ -367,6 +371,9 @@ impl Assembler {
     pub fn fix_labels(&mut self) {
         for i in 0..self.symtab.syms.len() {
             let s = &self.symtab.syms[i];
+            if s.flags & UNLISTED != 0 {
+                continue;
+            }
             if s.flags & ABSLABEL != 0 && s.kind == SymKind::LabSym {
                 let pc = s.pc;
                 let s = &mut self.symtab.syms[i];

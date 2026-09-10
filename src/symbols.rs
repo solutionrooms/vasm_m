@@ -25,6 +25,9 @@ pub const ABSLABEL: u32 = 1 << 11;
 pub const EQUATE: u32 = 1 << 12;
 pub const REGLIST: u32 = 1 << 13;
 pub const USED: u32 = 1 << 14;
+/// vasm_m only: an orphaned copy made by new_labsym() on redefinition. vasm
+/// never links that copy into its symbol list, so list walkers must skip it.
+pub const UNLISTED: u32 = 1 << 30;
 
 #[derive(Debug, Clone)]
 pub struct Symbol {
@@ -225,6 +228,7 @@ impl Assembler {
                 // its address. We emulate by creating an unregistered symbol.
                 self.general_error(5, &[Arg::from(name)]);
                 let mut copy = self.symtab.syms[i].clone();
+                copy.flags |= UNLISTED;
                 copy.kind = SymKind::LabSym;
                 copy.sec = Some(sec);
                 copy.pc = pc;

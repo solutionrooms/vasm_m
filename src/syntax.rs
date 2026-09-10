@@ -467,7 +467,7 @@ impl Assembler {
             let c = self.line[s];
             if opsz_bits(size) == 8 && (c == b'"' || c == b'\'') {
                 if let Some((data, ns)) = self.parse_string(opstart, c) {
-                    self.add_atom(Atom::data(DBlock { data }, 1));
+                    self.add_atom(Atom::data(DBlock::new(data), 1));
                     s = ns;
                     done = true;
                 }

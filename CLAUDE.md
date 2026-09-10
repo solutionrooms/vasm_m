@@ -8,25 +8,28 @@ A modern, multithreaded reimplementation of `vasmm68k_mot` in Rust. Output must 
 - Language: Rust (edition 2024).
 - Scope: `vasmm68k_mot` only (Motorola syntax module). CPU: plain 68000 only
   (no 68010+, no ColdFire/CPU32/FPU/MMU).
-- Output formats: hunk + bin first; ELF is phase 2.
+- Output formats: bin + hunk first (both done 2026-09-10); ELF is phase 2.
 - Listing/symbol-dump output: not required to match.
 - CLI: ideally drop-in for vasmm68k_mot flags; not a hard requirement.
 - Comparison standard: byte-exact object output vs reference vasm.
 
 ## Current state (keep this section current; detailed log is chat.md)
-- 2026-09-10 afternoon. Byte-exact on CubeDroid (Codex confirmed independently),
-  corpus 20/20, fuzzers (`tests/fuzz.py`, `fuzz_expr.py`, `fuzz_dir.py`) 0 mismatches.
-  ~0.12 s vs 0.63–0.70 s reference, single-threaded (Codex: 119.8 ms vs 695.1 ms).
-- Codex re-review of `19a26fa` + data merge: verified, no defects. Its P2 (relative
-  `--ref/--new/--out` broke the CubeDroid step) is fixed in all three runners;
-  regression: `python3 tests/check_runner_paths.py`.
-- Jon (2026-09-10): "keep the existing scope" → hunk stays phase 1 (bin done, hunk
-  next), ELF phase 2; threading strategy still undecided (do not build threading
-  until Jon decides). Windows laptop run still wanted:
-  `python3 tests/diff.py --cubedroid --ref <path to vasmm68k_mot.exe>` (relative OK now).
+- 2026-09-10 evening. Byte-exact on CubeDroid in **bin, hunk and hunkexe** (Codex
+  confirmed bin independently; hunk/hunkexe await Codex verification). Corpus 66/66
+  (bin+hunk, plus hunkexe where listed). Fuzzers 0 mismatches in bin/hunk/hunkexe.
+  ~0.11–0.14 s vs 0.60–0.70 s reference, single-threaded.
+- Hunk output landed (`src/output/hunk.rs`, transliterated output_hunk.c 2.9):
+  relocs are now recorded on data/space blocks by the encoder (`add_extnreloc`),
+  `-Fhunk`/`-Fhunkexe`, `-kick1hunks`/`-linedebug`/`-keepempty`/`-databss`,
+  `opt x+` (hunk_onlyglobal), orphan label copies flagged UNLISTED.
+- Jon (2026-09-10): "keep the existing scope" (hunk phase 1, ELF phase 2);
+  threading strategy still undecided — do not build threading until Jon decides.
+  Windows laptop run still wanted: `python3 tests/diff.py --cubedroid --ref <path
+  to vasmm68k_mot.exe>` (relative paths OK).
+- Waiting on Codex: independent verification of hunk/hunkexe vs 1.7h (see chat.md).
 - Exact next action on resume: read chat.md tail; run `tests/diff.sh &&
-  tests/cubedroid.sh`; then hunk output (`-Fhunk`, transliterate
-  `vasm-1.7h/output_hunk.c`, byte-exact vs reference, corpus with FORMATS="bin hunk").
+  tests/cubedroid.sh`; act on Codex findings / Jon's threading decision. Phase 2
+  (ELF) not started.
 
 ## Roles
 - **claude** leads implementation: owns code changes, delivers milestones.
@@ -69,7 +72,9 @@ A modern, multithreaded reimplementation of `vasmm68k_mot` in Rust. Output must 
 
 ## Workflow
 - `cargo build --release && tests/diff.sh && tests/cubedroid.sh` is the acceptance test
-  (`python3 tests/diff.py --cubedroid` is the cross-platform equivalent). Any diff is a bug.
+  (`python3 tests/diff.py --cubedroid` is the cross-platform equivalent). Corpus runs
+  in bin+hunk by default; `NAME.formats`, `NAME.<fmt>.flags`, `NAME.<fmt>.expect-fail`
+  refine a case. CubeDroid is compared in bin, hunk and hunkexe. Any diff is a bug.
 - Add a corpus file for every encoder/directive feature as it's implemented.
 - Debug env vars: `VASM_M_TIMING=1` (phase times, memo hit/miss, pass counts),
   `VASM_M_SYMS=1` (symbol dump), `VASM_M_PARSE_ONLY=1`.

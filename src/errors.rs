@@ -36,6 +36,10 @@ fn format_msg(fmt: &str, args: &[Arg]) -> String {
     let mut ai = 0;
     while let Some(c) = it.next() {
         if c == '%' {
+            // skip length modifiers (l, ll, h, z) before the conversion char
+            while matches!(it.peek(), Some('l' | 'h' | 'z')) {
+                it.next();
+            }
             match it.next() {
                 Some('%') => out.push('%'),
                 Some(_spec) => {

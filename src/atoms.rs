@@ -16,9 +16,34 @@ pub const IN_RORG: u32 = 64;
 pub const MAXSIZECHANGES: u32 = 5;
 pub const MAXPADBYTES: usize = 8;
 
+/// Standard relocation types (reloc.h). Only the ones the m68k backend emits.
+pub const REL_NONE: i32 = 0;
+pub const REL_ABS: i32 = 1;
+pub const REL_PC: i32 = 2;
+pub const REL_SD: i32 = 10;
+
+/// nreloc + rlist (reloc.h). vasm prepends new relocs to an atom's list, so
+/// consumers that must match its order iterate this Vec in reverse.
+#[derive(Debug, Clone)]
+pub struct Reloc {
+    pub kind: i32,
+    pub byteoffset: usize,
+    pub bitoffset: usize,
+    pub size: usize,
+    pub mask: Taddr,
+    pub addend: Taddr,
+    pub sym: usize,
+}
+
 #[derive(Debug, Clone)]
 pub struct DBlock {
     pub data: Vec<u8>,
+    pub relocs: Vec<Reloc>,
+}
+
+impl DBlock {
+    #[inline]
+    pub fn new(data: Vec<u8>) -> DBlock { DBlock { data, relocs: Vec::new() } }
 }
 
 #[derive(Debug, Clone)]
@@ -29,6 +54,7 @@ pub struct SBlock {
     pub fill: [u8; MAXPADBYTES],
     pub fill_exp: Option<Expr>,
     pub maxalignbytes: Taddr,
+    pub relocs: Vec<Reloc>,
 }
 
 #[derive(Debug, Clone)]
@@ -79,7 +105,7 @@ impl Atom {
     pub fn data(db: DBlock, align: Taddr) -> Atom { Atom::mk(AtomKind::Data(db), align) }
     pub fn inst(ip: Instruction) -> Atom { Atom::mk(AtomKind::Instruction(Box::new(ip)), INST_ALIGN) }
     pub fn space(space_exp: Expr, size: usize, fill: Option<Expr>) -> Atom {
-        Atom::mk(AtomKind::Space(Box::new(SBlock { space: 0, space_exp, size, fill: [0; MAXPADBYTES], fill_exp: fill, maxalignbytes: 0 })), 1)
+        Atom::mk(AtomKind::Space(Box::new(SBlock { space: 0, space_exp, size, fill: [0; MAXPADBYTES], fill_exp: fill, maxalignbytes: 0, relocs: Vec::new() })), 1)
     }
     pub fn datadef(bitsize: i32, op: Operand) -> Atom {
         Atom::mk(AtomKind::DataDef(Box::new(DataDef { bitsize, op })), data_align(bitsize))
@@ -287,7 +313,9 @@ impl Assembler {
         let line = self.cur_src.map(|s| self.sources[s].line).unwrap_or(0);
         let src = self.cur_src;
         let s = &mut self.sections[sec];
-        if let Some(last) = s.atoms.last_mut() {
+        // -linedebug (hunk) emits one line entry per DATA atom, so keep vasm's
+        // one-atom-per-operand structure in that mode.
+        if let Some(last) = s.atoms.last_mut().filter(|_| !self.opts.hunk_linedebug) {
             if last.align == 1 && last.line == line && last.src == src {
                 if let AtomKind::Data(db) = &mut last.kind {
                     db.data.extend_from_slice(bytes);
@@ -297,7 +325,19 @@ impl Assembler {
                 }
             }
         }
-        self.add_atom_to(Some(sec), Atom::data(DBlock { data: bytes.to_vec() }, 1));
+        self.add_atom_to(Some(sec), Atom::data(DBlock::new(bytes.to_vec()), 1));
+    }
+
+    /// add_extnreloc() (reloc.c): no relocation for ORG-section labels; marks
+    /// the symbol REFERENCED. Returns whether a reloc was added.
+    pub fn add_extnreloc(&mut self, relocs: &mut Vec<Reloc>, sym: usize, addend: Taddr, kind: i32, bitoffs: usize, size: usize, byteoffs: usize) -> bool {
+        let s = &mut self.symtab.syms[sym];
+        if s.flags & crate::symbols::ABSLABEL != 0 {
+            return false;
+        }
+        s.flags |= crate::symbols::REFERENCED;
+        relocs.push(Reloc { kind, byteoffset: byteoffs, bitoffset: bitoffs, size, mask: -1, addend, sym });
+        true
     }
 
     /// add_atom(sec, a)
@@ -444,13 +484,24 @@ impl Assembler {
             if let Some(fe) = sb.fill_exp.clone() {
                 if sb.size <= BYTES_PER_TADDR {
                     let (fill, cnst) = self.eval_expr(&fe, Some(sec), pc);
+                    let mut base: Option<usize> = None;
                     if !cnst {
-                        let (b, _) = self.find_base(&fe, Some(sec), pc);
+                        let (b, bs) = self.find_base(&fe, Some(sec), pc);
                         if b == crate::expr::Base::Illegal {
                             self.general_error(38, &[]);
                         }
+                        base = bs;
                     }
                     copy_cpu_taddr(&mut sb.fill, fill, sb.size);
+                    if let Some(b) = base.filter(|_| sb.relocs.is_empty()) {
+                        // space filled with a relocatable expression
+                        let (size, space) = (sb.size, sb.space as usize);
+                        let mut relocs = std::mem::take(&mut sb.relocs);
+                        for i in 0..space {
+                            self.add_extnreloc(&mut relocs, b, fill, REL_ABS, 0, size << 3, size * i);
+                        }
+                        sb.relocs = relocs;
+                    }
                 } else {
                     self.general_error(30, &[]);
                 }

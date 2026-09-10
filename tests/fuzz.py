@@ -75,6 +75,7 @@ far_f:\tnop
 """
 
 FLAGS = []
+FORMAT = "bin"
 TIMEOUT = 20
 
 def run_case(args):
@@ -83,8 +84,8 @@ def run_case(args):
     src.write_text(TEMPLATE.format(line))
     rf, nf = tmp / f"c{idx:06d}.ref", tmp / f"c{idx:06d}.out"
     try:
-        r = subprocess.run([str(REF), "-quiet", "-Fbin", "-m68000", *FLAGS, "-o", str(rf), str(src)], capture_output=True, text=True, timeout=TIMEOUT)
-        n = subprocess.run([str(NEW), "-quiet", "-Fbin", "-m68000", *FLAGS, "-o", str(nf), str(src)], capture_output=True, text=True, timeout=TIMEOUT)
+        r = subprocess.run([str(REF), "-quiet", f"-F{FORMAT}", "-m68000", *FLAGS, "-o", str(rf), str(src)], capture_output=True, text=True, timeout=TIMEOUT)
+        n = subprocess.run([str(NEW), "-quiet", f"-F{FORMAT}", "-m68000", *FLAGS, "-o", str(nf), str(src)], capture_output=True, text=True, timeout=TIMEOUT)
     except subprocess.TimeoutExpired as e:
         return (line, f"timeout: {e.cmd[0]}")
     rs, ns = r.returncode, n.returncode
@@ -107,10 +108,12 @@ def main():
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--keep", default=None)
     ap.add_argument("--flags", default="", help="extra flags for both assemblers, e.g. '-no-opt'")
+    ap.add_argument("--format", default="bin", help="output format to compare (bin, hunk, hunkexe)")
     a = ap.parse_args()
     if not REF.is_file() or not NEW.is_file():
         sys.exit("build both assemblers first")
-    global FLAGS
+    global FLAGS, FORMAT
+    FORMAT = a.format
     FLAGS = a.flags.split()
     rows = load_tables()
     cases = gen_cases(rows, random.Random(a.seed), a.limit)

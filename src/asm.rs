@@ -86,6 +86,8 @@ pub struct Assembler {
     pub ignore_multinc: bool,
     pub filename: Option<String>,
     pub secname_attr: bool,
+    /// `opt x+` / `opt xdebug`: only xdef symbols in hunk objects (cpu.c)
+    pub hunk_onlyglobal: bool,
     /// symbol-table save point for new_inst's save_symbols()/restore_symbols()
     pub saved_symcount: usize,
     pub last_sdreg: i32,
@@ -141,6 +143,7 @@ impl Assembler {
             ignore_multinc: opts.ignore_mult_inc,
             filename: None,
             secname_attr: true,
+            hunk_onlyglobal: false,
             saved_symcount: 0,
             last_sdreg: -1,
             memo_hits: 0,

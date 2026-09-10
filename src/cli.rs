@@ -5,6 +5,7 @@
 pub enum OutputFormat {
     Bin,
     Hunk,
+    HunkExe,
     Test,
 }
 
@@ -54,6 +55,11 @@ pub struct Options {
     pub chklabels: bool,
     pub regsymredef: bool,
     pub threads: usize,
+    /// hunk output module options (output_hunk.c)
+    pub hunk_kick1: bool,
+    pub hunk_linedebug: bool,
+    pub hunk_keepempty: bool,
+    pub hunk_databss: bool,
 }
 
 impl Default for Options {
@@ -97,19 +103,38 @@ impl Default for Options {
             chklabels: false,
             regsymredef: false,
             threads: 0,
+            hunk_kick1: false,
+            hunk_linedebug: false,
+            hunk_keepempty: false,
+            hunk_databss: false,
         }
     }
 }
 
 pub fn usage() -> String {
     "vasm_m: multithreaded 68000 assembler, vasm 1.7h compatible\n\
-     usage: vasm_m [-Fbin|-Fhunk] [-o out] [-quiet] [-spaces] [-m68000] [-Ipath] [-Dsym[=val]] \
-     [-no-opt] [-opt-*] [-nosym] [-maxerrors=n] [-x] [-w] [-threads=n] file.s\n"
+     usage: vasm_m [-Fbin|-Fhunk|-Fhunkexe] [-o out] [-quiet] [-spaces] [-m68000] [-Ipath] [-Dsym[=val]] \
+     [-no-opt] [-opt-*] [-nosym] [-maxerrors=n] [-x] [-w] [-threads=n] \
+     [-kick1hunks] [-linedebug] [-keepempty] [-databss] file.s\n"
         .to_string()
 }
 
 pub fn parse_args(args: &[String]) -> Result<Options, String> {
     let mut o = Options::default();
+    // vasm picks the output module (-F) before parsing the other options, so
+    // module-specific options are accepted regardless of their position.
+    for a in args {
+        if let Some(f) = a.strip_prefix("-F") {
+            o.format = match f {
+                "bin" => OutputFormat::Bin,
+                "hunk" => OutputFormat::Hunk,
+                "hunkexe" => OutputFormat::HunkExe,
+                "test" => OutputFormat::Test,
+                other => return Err(format!("unsupported output format: {}", other)),
+            };
+        }
+    }
+    let is_hunk = matches!(o.format, OutputFormat::Hunk | OutputFormat::HunkExe);
     let mut i = 0;
     while i < args.len() {
         let a = args[i].as_str();
@@ -153,6 +178,10 @@ pub fn parse_args(args: &[String]) -> Result<Options, String> {
             "-chklabels" => o.chklabels = true,
             "-regsymredef" => o.regsymredef = true,
             "-no-fpu" | "-unnamed-sections" | "-noialign" | "-pic" | "-warncomm" => {}
+            "-kick1hunks" if is_hunk => o.hunk_kick1 = true,
+            "-linedebug" if is_hunk => o.hunk_linedebug = true,
+            "-keepempty" if is_hunk => o.hunk_keepempty = true,
+            "-databss" if o.format == OutputFormat::HunkExe => o.hunk_databss = true,
             "-o" => {
                 i += 1;
                 o.output = Some(args.get(i).ok_or("missing filename after -o")?.clone());
@@ -166,13 +195,8 @@ pub fn parse_args(args: &[String]) -> Result<Options, String> {
                 return Err(format!("option not supported by vasm_m: {}", a));
             }
             _ => {
-                if let Some(f) = a.strip_prefix("-F") {
-                    o.format = match f {
-                        "bin" => OutputFormat::Bin,
-                        "hunk" => OutputFormat::Hunk,
-                        "test" => OutputFormat::Test,
-                        other => return Err(format!("unsupported output format: {}", other)),
-                    };
+                if a.starts_with("-F") {
+                    // handled by the pre-scan above
                 } else if let Some(p) = a.strip_prefix("-I") {
                     o.include_paths.push(p.to_string());
                 } else if let Some(d) = a.strip_prefix("-D") {

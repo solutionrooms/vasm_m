@@ -7,8 +7,11 @@
 #                                               both must reject with exit 1
 #                                               (a crash / signal is never a pass).
 # Optional:        NAME.flags                   extra flags for both assemblers.
+#                  NAME.<fmt>.flags             extra flags for one format only.
+#                  NAME.<fmt>.expect-fail       negative case for one format only.
+#                  NAME.formats                 formats for this case (overrides FORMATS).
 #
-# Env: REF (reference vasm), NEW (vasm_m), FORMATS ("bin hunk"), OUT (out dir).
+# Env: REF (reference vasm), NEW (vasm_m), FORMATS (default "bin hunk"), OUT (out dir).
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # REF/NEW/OUT may be given relative to the launch directory; make them absolute
@@ -16,7 +19,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 abs() { case "$1" in /*) printf '%s\n' "$1";; *) printf '%s/%s\n' "$PWD" "$1";; esac; }
 REF="${REF:-$ROOT/vasm-1.7h/vasmm68k_mot}"
 NEW="${NEW:-$ROOT/target/release/vasm_m}"
-FORMATS="${FORMATS:-bin}"
+FORMATS="${FORMATS:-bin hunk}"
 OUT="${OUT:-$ROOT/target/diff}"
 REF=$(abs "$REF"); NEW=$(abs "$NEW"); OUT=$(abs "$OUT")
 COMMON="-quiet -m68000"
@@ -33,9 +36,11 @@ set -- "$ROOT"/tests/corpus/*.s
 pass=0; fail=0
 for src in "$@"; do
   name=$(basename "$src" .s)
-  flags=""; [ -f "${src%.s}.flags" ] && flags=$(cat "${src%.s}.flags")
-  negative=0; [ -f "${src%.s}.expect-fail" ] && negative=1
-  for fmt in $FORMATS; do
+  cflags=""; [ -f "${src%.s}.flags" ] && cflags=$(cat "${src%.s}.flags")
+  formats="$FORMATS"; [ -f "${src%.s}.formats" ] && formats=$(cat "${src%.s}.formats")
+  for fmt in $formats; do
+    flags="$cflags"; [ -f "${src%.s}.$fmt.flags" ] && flags="$flags $(cat "${src%.s}.$fmt.flags")"
+    negative=0; { [ -f "${src%.s}.expect-fail" ] || [ -f "${src%.s}.$fmt.expect-fail" ]; } && negative=1
     ref="$OUT/$name.$fmt.ref"; new="$OUT/$name.$fmt.out"
     run_to "$REF" $COMMON -F$fmt $flags -o "$ref" "$src" >"$ref.log" 2>&1; rs=$?
     run_to "$NEW" $COMMON -F$fmt $flags -o "$new" "$src" >"$new.log" 2>&1; ns=$?

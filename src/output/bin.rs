@@ -7,7 +7,7 @@ use std::io::Write;
 
 impl Assembler {
     /// fwpcalign(): write alignment padding; returns the aligned pc
-    fn fwpcalign(&mut self, out: &mut Vec<u8>, sec: usize, ai: usize, pc: u64) -> u64 {
+    pub(crate) fn fwpcalign(&mut self, out: &mut Vec<u8>, sec: usize, ai: usize, pc: u64) -> u64 {
         let a = &self.sections[sec].atoms[ai];
         let mut n = balign(pc as i32, a.align) as u32 as u64;
         if n == 0 {

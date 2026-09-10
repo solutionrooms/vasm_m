@@ -546,3 +546,59 @@ Committed as the commit after `bc5e1c9` (see `git log`). Next: hunk output
 (`-Fhunk`), transliterating `output_hunk.c`, gated byte-exact with
 `FORMATS="bin hunk" tests/diff.sh`. Jon: the Windows run now accepts a relative
 `--ref` path.
+
+## [claude] 2026-09-10 — hunk + hunkexe output landed, byte-exact on CubeDroid
+
+Jon kept the existing scope, so hunk is phase 1 and is now done. Commit after
+`c520473` (see `git log`).
+
+**What changed**
+- Relocation model: the encoder now records relocs on data/space blocks exactly as
+  `add_extnreloc()` does (`atoms.rs::add_extnreloc`, `Reloc`, `DBlock.relocs`,
+  `SBlock.relocs`; sites: `write_branch`, `write_ea_ext`, `eval_data`,
+  `space_size`). ORG-section labels get no reloc; symbols get REFERENCED (so
+  warning 61 now behaves like vasm). Reloc lists are iterated in reverse to match
+  vasm's prepend order.
+- `src/output/hunk.rs`: transliteration of output_hunk.c 2.9 — `write_object`
+  (`-Fhunk`) and `write_exec` (`-Fhunkexe`), `prepare_sections` (empty-section
+  drop, dummy `.text` section, dummy refs for unreferenced commons, weak→global
+  warning 10), reloc/xref/symbol/linedebug hunks, `-kick1hunks`, `-linedebug`,
+  `-keepempty`, `-databss`, `-nosym`, `opt x+`/`xdebug` → hunk_onlyglobal.
+  Format-specific options are accepted regardless of position, like vasm's -F
+  pre-scan.
+- Found by the directive fuzzer in hunk mode: a redefined label (warning 5) makes
+  vasm work on an orphan copy that is never linked into its symbol list; my copy
+  was in the symbol vector and leaked into HUNK_SYMBOL. Fixed with an UNLISTED
+  flag honoured by the hunk writer, `undef_syms` and `fix_labels`.
+- `-linedebug` disables the constant-data merge (one LINE entry per DATA atom).
+- Error formatter now skips printf length modifiers (`%lx` printed a stray `x`).
+
+**Verification (all vs 1.7h, this machine)**
+- CubeDroid: bin 944216 B, hunk 1013872 B, hunkexe 1013856 B — all identical.
+  ~0.11 s vs ~0.61 s for each format.
+- Corpus 66/66: every case in bin+hunk (hunkexe where `.formats` says so); 13 new
+  hunk cases: sections/memflags/xref/xdef/comm/weak, exe short+long reloc tables,
+  `-databss -kick1hunks`, `-linedebug`, symbols/`-nosym`/`opt x+`, space fills
+  with relocs, unsupported 16-bit abs reloc (both reject), `-keepempty`, org +
+  relocatable mix, exported-equate-only unit, empty unit. `sections_diff` is
+  marked `.hunk.expect-fail` (dc.w of a label; both reject).
+- Fuzzers now take `--format`: instructions 4000 hunk + 3000 hunkexe + 3000 hunk
+  `-no-opt`; directives 400+1500 hunk, 300 hunkexe; bin regression 4000+3000
+  instructions, 600 directives, 400 expression files. 0 mismatches everywhere.
+- `cargo check --target x86_64-pc-windows-msvc` clean; `check_runner_paths.py` 3/3.
+
+**Asks for codex**
+1. Independent hunk/hunkexe verification on your snapshot: CubeDroid in all three
+   formats, corpus with `FORMATS="bin hunk"`, and your own cases — especially
+   symbol-hunk ordering (I rely on my symbol vector being creation order and
+   reverse-walk it like vasm's prepended list), xref grouping order, short vs
+   long reloc tables in hunkexe (`>= 0x10000` offsets), and `-databss` trimming.
+2. Two places where vasm reads uninitialised state and I chose a value:
+   `prepare_sections` uses `sec->idx` of a *deleted* first section for exported
+   equates (I use 0), and `convert_reloc` with `type` unset for odd reloc sizes
+   (I return "unsupported"). If you can construct inputs that hit these, tell me
+   what 1.7h actually emits.
+3. README still says "the new assembler has not been implemented yet" — yours to
+   refresh when convenient.
+
+Threading: still waiting on Jon's decision; nothing built. Windows run still wanted.

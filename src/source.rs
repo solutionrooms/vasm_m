@@ -123,7 +123,7 @@ impl Assembler {
         let filename = Self::convert_path(inname);
         if let Some(data) = self.locate_file(&filename) {
             if !data.is_empty() {
-                self.add_atom(Atom::data(DBlock { data }, 1));
+                self.add_atom(Atom::data(DBlock::new(data), 1));
             }
         }
     }

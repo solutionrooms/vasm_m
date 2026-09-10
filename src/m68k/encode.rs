@@ -1,11 +1,11 @@
 //! Instruction and data encoding, transliterated from vasm 1.7h cpus/m68k/cpu.c
 //! (write_val, write_branch, write_extval, write_ea_ext, eval_instruction,
-//! eval_data). Relocations are not needed for -Fbin; the code paths that
-//! would create them still perform the same range checks and byte writes.
+//! eval_data). Relocations are attached to the data block exactly as vasm
+//! does (add_extnreloc); -Fbin ignores them, -Fhunk converts them.
 use super::tables::*;
 use super::*;
 use crate::asm::Assembler;
-use crate::atoms::{setval_be, DBlock, ABSOLUTE};
+use crate::atoms::{setval_be, DBlock, Reloc, ABSOLUTE, REL_ABS, REL_NONE, REL_PC, REL_SD};
 use crate::errors::Arg;
 use crate::expr::Base as EBase;
 use crate::symbols::ABSLABEL;
@@ -72,35 +72,46 @@ impl Assembler {
     }
 
     /// write_branch(): returns new write index
-    fn write_branch(&mut self, d: &mut Vec<u8>, mut di: usize, op: &Operand, ext: u8, sec: usize, pc: Taddr, bcc: bool) -> usize {
+    fn write_branch(&mut self, d: &mut Vec<u8>, relocs: &mut Vec<Reloc>, mut di: usize, op: &Operand, ext: u8, sec: usize, pc: Taddr, bcc: bool) -> usize {
         if !bcc && ext != b'w' && ext != b'l' {
             self.ierror(0, "encode.rs", line!());
         }
         if let Some(b) = op.base[0] {
             if self.is_pc_reloc(b, sec) {
+                // external branch label, or label from a different section
                 let mut addend = op.extval[0];
+                let (mut size, mut offset) = (0usize, 0usize);
                 match ext {
                     b'b' | b's' => {
-                        addend = addend.wrapping_sub(1);
+                        addend = addend.wrapping_sub(1); // reloc offset is stored 1 byte before PC
                         d[di - 1] = (addend & 0xff) as u8;
+                        size = 8;
+                        offset = 1;
                     }
                     b'l' => {
                         if self.cpu.cpu_type & (m68020up | cpu32 | mcfb | mcfc | m68881 | m68851) != 0 {
                             if bcc { d[di - 1] = 0xff; }
+                            offset = di;
                             d.resize(di + 4, 0);
                             setval_be(&mut d[di..], 4, addend);
                             di += 4;
+                            size = 32;
                         } else {
                             self.cpu_error(0, &[]);
                         }
                     }
                     b'w' => {
                         if bcc { d[di - 1] = 0; }
+                        offset = di;
                         d.resize(di + 2, 0);
                         setval_be(&mut d[di..], 2, addend);
                         di += 2;
+                        size = 16;
                     }
                     _ => self.cpu_error(34, &[]),
+                }
+                if size != 0 {
+                    self.add_extnreloc(relocs, b, addend, REL_PC, 0, size, offset);
                 }
             } else {
                 let diff = op.extval[0].wrapping_sub(pc);
@@ -152,7 +163,7 @@ impl Assembler {
     }
 
     /// write_ea_ext(): returns new write index
-    fn write_ea_ext(&mut self, d: &mut Vec<u8>, mut di: usize, op: &mut Operand, ext: u8, sec: usize, pc: Taddr) -> usize {
+    fn write_ea_ext(&mut self, d: &mut Vec<u8>, relocs: &mut Vec<Reloc>, mut di: usize, op: &mut Operand, ext: u8, sec: usize, pc: Taddr) -> usize {
         if op.mode > MODE_Extended || (op.mode == MODE_Extended && op.reg > REG_Immediate) {
             self.ierror(0, "encode.rs", line!());
         }
@@ -160,6 +171,11 @@ impl Assembler {
             return di;
         }
         let typechk = self.cpu.typechk;
+        let mut rtype = REL_NONE;
+        let mut roffs = di;
+        let mut rsize = 0usize;
+        let mut ortype = REL_NONE;
+        let mut orsize = 0usize;
         if op.flags & FL_020up != 0 {
             if self.cpu.cpu_type & (m68020up | cpu32) == 0 {
                 self.cpu_error(0, &[]);
@@ -171,11 +187,14 @@ impl Assembler {
             let mut rel_abs = false;
             let mut rel_sd = false;
             if let Some(b) = op.base[0] {
+                rsize = 16;
                 let extref = self.symtab.syms[b].is_extref();
                 if (extref && op.reg as i32 != self.cpu.sdreg) || op.basetype[0] == EBase::PcRel {
                     rel_abs = true;
+                    rtype = REL_ABS;
                 } else if op.basetype[0] == EBase::Ok {
                     rel_sd = true;
+                    rtype = REL_SD;
                 } else {
                     self.general_error(38, &[]);
                 }
@@ -202,8 +221,11 @@ impl Assembler {
                     self.cpu_error(29, &[]);
                 }
                 if let Some(b) = op.base[0] {
+                    rsize = 8;
                     let s = &self.symtab.syms[b];
-                    if !(s.is_extref() || (s.is_locref() && op.basetype[0] == EBase::PcRel)) {
+                    if s.is_extref() || (s.is_locref() && op.basetype[0] == EBase::PcRel) {
+                        rtype = REL_ABS;
+                    } else {
                         self.cpu_error(30, &[]);
                     }
                 }
@@ -215,7 +237,10 @@ impl Assembler {
             if op.reg == REG_PC16Disp {
                 let mut disp = op.extval[0];
                 if let Some(b) = op.base[0] {
-                    if !self.is_pc_reloc(b, sec) {
+                    if self.is_pc_reloc(b, sec) {
+                        rtype = REL_PC;
+                        rsize = 16;
+                    } else {
                         disp = op.extval[0].wrapping_sub(pc);
                     }
                 }
@@ -237,7 +262,10 @@ impl Assembler {
                 } else {
                     if let Some(b) = op.base[0] {
                         if self.is_pc_reloc(b, sec) {
-                            op.extval[0] = op.extval[0].wrapping_add(1);
+                            rtype = REL_PC;
+                            rsize = 8;
+                            roffs += 1;
+                            op.extval[0] = op.extval[0].wrapping_add(1); // pc-relative xref fix
                             disp = disp.wrapping_add(1);
                         } else {
                             disp = op.extval[0].wrapping_sub(pc);
@@ -255,15 +283,28 @@ impl Assembler {
                     self.cpu_error(32, &[]);
                 }
                 let rel_abs = op.base[0].is_some();
+                if rel_abs {
+                    rtype = REL_ABS;
+                    rsize = 16;
+                }
                 di = Self::write_extval(0, 2, d, di, op, rel_abs);
             } else if op.reg == REG_AbsLong {
                 let rel_abs = op.base[0].is_some();
+                if rel_abs {
+                    rtype = REL_ABS;
+                    rsize = 32;
+                }
                 di = Self::write_extval(0, 4, d, di, op, rel_abs);
             } else if op.reg == REG_Immediate {
                 let rel_abs = op.base[0].is_some();
+                if rel_abs {
+                    rtype = REL_ABS;
+                }
                 match ext {
                     b'b' => {
                         if op.flags & FL_ExtVal0 != 0 {
+                            roffs += 1;
+                            rsize = 8;
                             d.push(0);
                             di += 1;
                             di = Self::write_extval(0, 1, d, di, op, rel_abs);
@@ -276,6 +317,7 @@ impl Assembler {
                     }
                     b'w' => {
                         if op.flags & FL_ExtVal0 != 0 {
+                            rsize = 16;
                             di = Self::write_extval(0, 2, d, di, op, rel_abs);
                             if typechk && (op.extval[0] < -0x8000 || op.extval[0] > 0xffff) {
                                 self.cpu_error(36, &[]);
@@ -286,6 +328,7 @@ impl Assembler {
                     }
                     b'l' => {
                         if op.flags & FL_ExtVal0 != 0 {
+                            rsize = 32;
                             di = Self::write_extval(0, 4, d, di, op, rel_abs);
                         } else if op.value[0].as_ref().map(|v| self.type_of_expr(v)) == Some(3) {
                             let f = self.eval_expr_float(&op.value[0].clone().unwrap()).unwrap_or(0.0);
@@ -314,6 +357,21 @@ impl Assembler {
                 }
             }
         }
+        // append relocations
+        if rtype != REL_NONE {
+            if rtype == REL_ABS && op.basetype[0] == EBase::PcRel {
+                rtype = REL_PC;
+            }
+            self.add_extnreloc(relocs, op.base[0].unwrap(), op.extval[0], rtype, 0, rsize, roffs);
+        }
+        if ortype != REL_NONE {
+            if ortype == REL_ABS && op.basetype[1] == EBase::PcRel {
+                ortype = REL_PC;
+            }
+            let o = if rtype == REL_NONE { roffs } else { roffs + rsize / 8 };
+            self.add_extnreloc(relocs, op.base[1].unwrap(), op.extval[1], ortype, 0, orsize, o);
+        }
+        let _ = orsize;
         di
     }
 
@@ -337,10 +395,11 @@ impl Assembler {
         self.optimize_instruction_final(ip, sec, pc);
         let size = Self::iplist_size(ip);
         let mut d: Vec<u8> = Vec::with_capacity(size);
+        let mut relocs: Vec<Reloc> = Vec::new();
         if size == 0 {
             ip.ext.flags = ipflags;
             ip.ext.last_size = lastsize;
-            return DBlock { data: d };
+            return DBlock::new(d);
         }
         let mut pc = pc;
         let mut cur: Option<&mut Instruction> = Some(ip);
@@ -407,7 +466,7 @@ impl Assembler {
                             }
                             if oii.mode != M_nop {
                                 let mut o2 = std::mem::replace(op, Operand::new());
-                                newd = self.write_ea_ext(&mut d, newd, &mut o2, ext, sec, pc);
+                                newd = self.write_ea_ext(&mut d, &mut relocs, newd, &mut o2, ext, sec, pc);
                                 *op = o2;
                             }
                         }
@@ -415,12 +474,12 @@ impl Assembler {
                             d[dbstart] |= (((op.reg & 7) << 1) | ((op.mode & 4) >> 2)) as u8;
                             d[dbstart + 1] |= ((op.mode & 3) << 6) as u8;
                             let mut o2 = std::mem::replace(op, Operand::new());
-                            newd = self.write_ea_ext(&mut d, newd, &mut o2, ext, sec, pc);
+                            newd = self.write_ea_ext(&mut d, &mut relocs, newd, &mut o2, ext, sec, pc);
                             *op = o2;
                         }
                         M_branch => {
                             let o2 = op.clone();
-                            newd = self.write_branch(&mut d, newd, &o2, ext, sec, pc, oii.flags & IIF_BCC != 0);
+                            newd = self.write_branch(&mut d, &mut relocs, newd, &o2, ext, sec, pc, oii.flags & IIF_BCC != 0);
                         }
                         M_val0 => {
                             if op.base[0].is_none() {
@@ -470,7 +529,7 @@ impl Assembler {
         }
         ip.ext.flags = ipflags;
         ip.ext.last_size = lastsize;
-        DBlock { data: d }
+        DBlock { data: d, relocs }
     }
 
     fn optimize_instruction_final(&mut self, ip: &mut Instruction, sec: usize, pc: Taddr) {
@@ -486,6 +545,8 @@ impl Assembler {
         let mut val: Taddr = 0;
         let mut hval: Thuge = 0;
         let mut fval: f64 = 0.0;
+        let mut base: Option<usize> = None;
+        let mut btype = EBase::None;
         let etype = if etype == 3 {
             match self.eval_expr_float(&v) {
                 Some(f) => fval = f,
@@ -502,10 +563,12 @@ impl Assembler {
             let (vv, cnst) = self.eval_expr(&v, Some(sec), pc);
             val = vv;
             if !cnst {
-                let (bt, _) = self.find_base(&v, Some(sec), pc);
+                let (bt, b) = self.find_base(&v, Some(sec), pc);
                 if bt == EBase::Illegal {
                     self.general_error(38, &[]);
                 }
+                base = b;
+                btype = bt;
             }
             1
         };
@@ -561,7 +624,12 @@ impl Assembler {
             }
             _ => self.cpu_error(38, &[Arg::from(bitsize)]),
         }
-        DBlock { data }
+        let mut relocs: Vec<Reloc> = Vec::new();
+        if let Some(b) = base {
+            // relocation required
+            self.add_extnreloc(&mut relocs, b, val, if btype == EBase::PcRel { REL_PC } else { REL_ABS }, 0, bitsize as usize, 0);
+        }
+        DBlock { data, relocs }
     }
 }
 

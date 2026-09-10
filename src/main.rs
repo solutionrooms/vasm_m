@@ -92,8 +92,19 @@ fn main() -> ExitCode {
                     eprintln!("timing: output {:?}", t4.elapsed());
                 }
             }
-            _ => {
-                a.general_error(16, &[errors::Arg::from("hunk/test not implemented")]);
+            cli::OutputFormat::Hunk | cli::OutputFormat::HunkExe => {
+                let t4 = std::time::Instant::now();
+                let exec = a.opts.format == cli::OutputFormat::HunkExe;
+                let data = a.write_hunk(exec);
+                if a.errs.errors == 0 {
+                    a.write_output_file(&data);
+                }
+                if timing {
+                    eprintln!("timing: output {:?}", t4.elapsed());
+                }
+            }
+            cli::OutputFormat::Test => {
+                a.general_error(16, &[errors::Arg::from("test")]);
             }
         }
     }

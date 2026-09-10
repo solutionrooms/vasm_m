@@ -15,14 +15,17 @@ PROJ="$ROOT/AssemblyTest/CubeDroid"
 [ -x "$NEW" ] || { echo "vasm_m not built: cargo build --release"; exit 2; }
 rm -rf "$OUT" && mkdir -p "$OUT" || exit 2
 cd "$PROJ" || exit 2
-/usr/bin/time -p "$REF" -quiet -Fbin -spaces -o "$OUT/ref.bin" SourceCode/stub.X68 2>"$OUT/ref.log"; rs=$?
-/usr/bin/time -p "$NEW" -quiet -Fbin -spaces -o "$OUT/new.bin" SourceCode/stub.X68 2>"$OUT/new.log"; ns=$?
-echo "ref: exit=$rs $(grep real "$OUT/ref.log")   new: exit=$ns $(grep real "$OUT/new.log")"
-[ $rs -eq 0 ] || { echo "FAIL: reference failed"; cat "$OUT/ref.log"; exit 1; }
-[ $ns -eq 0 ] || { echo "FAIL: vasm_m failed"; grep -v real "$OUT/new.log" | head -20; exit 1; }
-if cmp -s "$OUT/ref.bin" "$OUT/new.bin"; then
-  echo "PASS: CubeDroid byte-exact ($(stat -f %z "$OUT/ref.bin") bytes)"
-else
-  echo "FAIL: CubeDroid differs: $(cmp -l "$OUT/ref.bin" "$OUT/new.bin" 2>/dev/null | wc -l | tr -d ' ') bytes; first: $(cmp "$OUT/ref.bin" "$OUT/new.bin" 2>&1 | head -1)"
-  exit 1
-fi
+status=0
+for fmt in bin hunk hunkexe; do
+  /usr/bin/time -p "$REF" -quiet -F$fmt -spaces -o "$OUT/ref.$fmt" SourceCode/stub.X68 2>"$OUT/ref.$fmt.log"; rs=$?
+  /usr/bin/time -p "$NEW" -quiet -F$fmt -spaces -o "$OUT/new.$fmt" SourceCode/stub.X68 2>"$OUT/new.$fmt.log"; ns=$?
+  echo "$fmt: ref exit=$rs $(grep real "$OUT/ref.$fmt.log")   new exit=$ns $(grep real "$OUT/new.$fmt.log")"
+  if [ $rs -ne 0 ]; then echo "FAIL [$fmt]: reference failed"; cat "$OUT/ref.$fmt.log"; status=1
+  elif [ $ns -ne 0 ]; then echo "FAIL [$fmt]: vasm_m failed"; grep -v real "$OUT/new.$fmt.log" | head -20; status=1
+  elif cmp -s "$OUT/ref.$fmt" "$OUT/new.$fmt"; then
+    echo "PASS: CubeDroid byte-exact [$fmt] ($(stat -f %z "$OUT/ref.$fmt") bytes)"
+  else
+    echo "FAIL [$fmt]: CubeDroid differs: $(cmp -l "$OUT/ref.$fmt" "$OUT/new.$fmt" 2>/dev/null | wc -l | tr -d ' ') bytes; first: $(cmp "$OUT/ref.$fmt" "$OUT/new.$fmt" 2>&1 | head -1)"; status=1
+  fi
+done
+exit $status

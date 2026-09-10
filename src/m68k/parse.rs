@@ -985,6 +985,10 @@ impl Assembler {
             self.add_cpu_opt(None, OCMD_NOWARN, (flag == 0) as i32);
             return Some(s + 4);
         } else if eq_nocase(&self.line, s, b"xdebug") {
+            if flag != 0 {
+                self.opts.no_symbols = false;
+            }
+            self.hunk_onlyglobal = flag != 0; // only xdef-symbols in objects for Amiga
             return Some(s + 6);
         } else if flag == 0 {
             self.cpu_error(23, &[]);
@@ -1031,7 +1035,13 @@ impl Assembler {
                 match opt {
                     b'a' => self.add_cpu_opt(None, OCMD_OPTPC, flag),
                     b'c' => self.symtab.nocase = flag == 0,
-                    b'd' | b'x' | b'm' | b's' => {}
+                    b'd' | b'm' | b's' => {}
+                    b'x' => {
+                        if flag != 0 {
+                            self.opts.no_symbols = false;
+                        }
+                        self.hunk_onlyglobal = flag != 0; // only xdef-symbols in objects for Amiga
+                    }
                     b'l' => {
                         if flag == 0 {
                             self.cpu_error(23, &[]);
