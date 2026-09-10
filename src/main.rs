@@ -56,7 +56,7 @@ fn main() -> ExitCode {
     }
     let t3 = std::time::Instant::now();
     if timing {
-        eprintln!("timing: parse {:?} resolve {:?} assemble {:?}", t1 - t0, t2 - t1, t3 - t2);
+        eprintln!("timing: parse {:?} resolve {:?} assemble {:?}; memo hits {} misses {}", t1 - t0, t2 - t1, t3 - t2, a.memo_hits, a.memo_misses);
     }
     if a.errs.errors == 0 {
         a.undef_syms();

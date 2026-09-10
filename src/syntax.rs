@@ -407,7 +407,7 @@ impl Assembler {
     // ----- offsets (rs/so/fo) ---------------------------------------------------
     fn new_setoffset_size(&mut self, equname: Option<&str>, symname: &str, s: &mut usize, dir: i32, size: Taddr) {
         let sym = self.internal_abs(symname);
-        let old_expr = self.symtab.syms[sym].expr.clone().unwrap_or(Expr::Num(0));
+        let old_expr = self.symtab.syms[sym].expr.as_ref().map(|e| (**e).clone()).unwrap_or(Expr::Num(0));
         let (old, new) = if !is_eol(&self.line, *s) {
             let e = self.parse_expr_tmplab(s);
             let mut new = Expr::Bin(Op::Mul, Box::new(e), Box::new(Expr::Num(size)));
@@ -435,7 +435,7 @@ impl Assembler {
         }
         let mut new = new;
         self.simplify_expr(&mut new);
-        self.symtab.syms[sym].expr = Some(new);
+        self.symtab.syms[sym].expr = Some(std::rc::Rc::new(new));
     }
 
     fn new_setoffset(&mut self, equname: Option<&str>, s: &mut usize, symname: &str, dir: i32) {

@@ -319,11 +319,16 @@ impl Assembler {
                 && m.deps.iter().all(|&(s, v)| self.symtab.syms[s as usize].version == v)
             {
                 ip.ext.last_size = m.last_size_out;
+                self.memo_hits += 1;
                 return m.size;
             }
         }
+        self.memo_misses += 1;
         let (code_in, qual_in, flags_in, last_in) = (ip.code, ip.qual, ip.ext.flags, ip.ext.last_size);
-        let mut deps: Vec<(u32, u32)> = Vec::new();
+        let mut deps: Vec<(u32, u32)> = match ip.memo.take() {
+            Some(m) => { let mut d = m.deps; d.clear(); d }
+            None => Vec::new(),
+        };
         for o in ip.op.iter().flatten() {
             for v in o.value.iter().flatten() {
                 self.collect_deps(v, &mut deps);
@@ -359,7 +364,7 @@ impl Assembler {
                     out.push((s as u32, sym.version));
                 }
                 if sym.kind == crate::symbols::SymKind::Expression {
-                    if let Some(x) = &sym.expr {
+                    if let Some(x) = sym.expr.as_deref() {
                         if sym.flags & crate::symbols::INEVAL == 0 {
                             self.collect_deps(x, out);
                         }

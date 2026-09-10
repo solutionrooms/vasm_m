@@ -89,6 +89,8 @@ pub struct Assembler {
     /// symbol-table save point for new_inst's save_symbols()/restore_symbols()
     pub saved_symcount: usize,
     pub last_sdreg: i32,
+    pub memo_hits: u64,
+    pub memo_misses: u64,
 }
 
 impl Assembler {
@@ -141,6 +143,8 @@ impl Assembler {
             secname_attr: true,
             saved_symcount: 0,
             last_sdreg: -1,
+            memo_hits: 0,
+            memo_misses: 0,
             opts,
         };
         // init_cpu(): predefine register symbols sp and fp

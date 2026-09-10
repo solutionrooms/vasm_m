@@ -27,10 +27,9 @@ impl Assembler {
             }
             let mut extrapass = pass <= fastphase;
             self.sections[sec].pc = self.sections[sec].org;
-            let n = self.sections[sec].atoms.len();
-            for i in 0..n {
-                let mut a = std::mem::replace(&mut self.sections[sec].atoms[i], Atom::rorgend());
-                let pc = pcalign(&a, self.sections[sec].pc);
+            let mut atoms = std::mem::take(&mut self.sections[sec].atoms);
+            for a in atoms.iter_mut() {
+                let pc = pcalign(a, self.sections[sec].pc);
                 self.sections[sec].pc = pc;
                 self.cur_src = a.src;
                 if let Some(cs) = a.src {
@@ -74,17 +73,16 @@ impl Assembler {
                     // safe mode: optimize only one instruction per pass
                     let s = &mut self.sections[sec];
                     s.pc = s.pc.wrapping_add(a.lastsize as Taddr);
-                    self.sections[sec].atoms[i] = a;
                     continue;
                 }
                 let pc = self.sections[sec].pc;
                 let size = if a.changes > MAXSIZECHANGES {
                     self.sections[sec].flags |= RESOLVE_WARN;
-                    let sz = self.atom_size(&mut a, sec, pc);
+                    let sz = self.atom_size(a, sec, pc);
                     self.sections[sec].flags &= !RESOLVE_WARN;
                     sz
                 } else {
-                    self.atom_size(&mut a, sec, pc)
+                    self.atom_size(a, sec, pc)
                 };
                 if size != a.lastsize {
                     done = false;
@@ -97,8 +95,8 @@ impl Assembler {
                 }
                 let s = &mut self.sections[sec];
                 s.pc = s.pc.wrapping_add(size as Taddr);
-                self.sections[sec].atoms[i] = a;
             }
+            self.sections[sec].atoms = atoms;
             if rorg_pc != 0 {
                 let s = &mut self.sections[sec];
                 s.pc = org_pc.wrapping_add(s.pc.wrapping_sub(rorg_pc));
@@ -135,7 +133,7 @@ impl Assembler {
                         let s = &mut self.symtab.syms[i];
                         s.kind = SymKind::Expression;
                         s.sec = None;
-                        s.expr = Some(Expr::Num(pc));
+                        s.expr = Some(std::rc::Rc::new(Expr::Num(pc)));
                     }
                 }
             }
@@ -334,9 +332,9 @@ impl Assembler {
                 s.sec = None;
                 s.size = None;
                 s.align = 0;
-                s.expr = Some(Expr::Num(pc));
+                s.expr = Some(std::rc::Rc::new(Expr::Num(pc)));
             } else if s.kind == SymKind::Expression {
-                let e = s.expr.clone().unwrap_or(Expr::Num(0));
+                let e = s.expr.clone().unwrap_or_else(|| std::rc::Rc::new(Expr::Num(0)));
                 let (val, cnst) = self.eval_expr(&e, None, 0);
                 if !cnst {
                     let (b, base) = self.find_base(&e, None, 0);

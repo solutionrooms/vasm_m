@@ -875,9 +875,15 @@ impl Assembler {
         if mnemo.opcode[0] == 0xf518 && ct & m68040up == 0 {
             realip.code += 1;
         }
-        // optimise a copy
-        let mut ip = realip.clone();
-        ip.next = None;
+        // optimise a copy (without the memo, which is only for the real ip)
+        let mut ip = Instruction {
+            memo: None,
+            code: realip.code,
+            qual: realip.qual,
+            op: realip.op.clone(),
+            ext: realip.ext,
+            next: None,
+        };
         let extflags = self.optimize_instruction(&mut ip, sec, pc, false);
         let size = Self::iplist_size(&ip);
         if extflags & IFL_RETAINLASTSIZE == 0 {

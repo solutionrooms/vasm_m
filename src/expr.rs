@@ -6,6 +6,7 @@ use crate::chars::*;
 use crate::errors::Arg;
 use crate::symbols::{SymKind, ABSLABEL, INEVAL, USED};
 use crate::types::*;
+use std::rc::Rc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Op {
@@ -210,7 +211,7 @@ impl Assembler {
             Expr::Sym(sym)
         } else {
             // copy_tree(sym->expr)
-            self.symtab.syms[sym].expr.clone().unwrap_or(Expr::Num(0))
+            self.symtab.syms[sym].expr.as_ref().map(|e| (**e).clone()).unwrap_or(Expr::Num(0))
         }
     }
 
@@ -510,7 +511,7 @@ impl Assembler {
             Expr::Sym(s) => {
                 let sym = &self.symtab.syms[*s];
                 if sym.kind == SymKind::Expression {
-                    match &sym.expr {
+                    match sym.expr.as_deref() {
                         Some(e @ (Expr::Num(_) | Expr::Huge(_) | Expr::Flt(_))) => Some(e.clone()),
                         _ => None,
                     }
@@ -654,7 +655,7 @@ impl Assembler {
                             self.general_error(18, &[Arg::from(name)]);
                         }
                         self.symtab.syms[s].flags |= INEVAL;
-                        let e = self.symtab.syms[s].expr.clone().unwrap_or(Expr::Num(0));
+                        let e = self.symtab.syms[s].expr.clone().unwrap_or_else(|| Rc::new(Expr::Num(0)));
                         let r = self.eval_expr(&e, sec, pc);
                         self.symtab.syms[s].flags &= !INEVAL;
                         r
@@ -720,7 +721,7 @@ impl Assembler {
                         self.general_error(18, &[Arg::from(name)]);
                     }
                     self.symtab.syms[s].flags |= INEVAL;
-                    let e = self.symtab.syms[s].expr.clone().unwrap_or(Expr::Num(0));
+                    let e = self.symtab.syms[s].expr.clone().unwrap_or_else(|| Rc::new(Expr::Num(0)));
                     let r = self.eval_expr_huge(&e);
                     self.symtab.syms[s].flags &= !INEVAL;
                     r
@@ -758,7 +759,7 @@ impl Assembler {
                 let s = *s;
                 if self.symtab.syms[s].kind == SymKind::Expression {
                     self.symtab.syms[s].flags |= INEVAL;
-                    let e = self.symtab.syms[s].expr.clone().unwrap_or(Expr::Num(0));
+                    let e = self.symtab.syms[s].expr.clone().unwrap_or_else(|| Rc::new(Expr::Num(0)));
                     let r = self.eval_expr_float(&e);
                     self.symtab.syms[s].flags &= !INEVAL;
                     r
@@ -800,7 +801,7 @@ impl Assembler {
                 let sym = &self.symtab.syms[*s];
                 if sym.kind == SymKind::Expression {
                     if sym.flags & INEVAL != 0 { return 1; }
-                    sym.expr.as_ref().map(|e| self.type_of_expr(e)).unwrap_or(1)
+                    sym.expr.as_deref().map(|e| self.type_of_expr(e)).unwrap_or(1)
                 } else { 1 }
             }
             Expr::Un(_, l) => self.type_of_expr(l),
@@ -819,7 +820,7 @@ impl Assembler {
                     SymKind::Expression => {
                         if sym.flags & INEVAL != 0 { return false; }
                         self.symtab.syms[s].flags |= INEVAL;
-                        let e = self.symtab.syms[s].expr.clone().unwrap_or(Expr::Num(0));
+                        let e = self.symtab.syms[s].expr.clone().unwrap_or_else(|| Rc::new(Expr::Num(0)));
                         let ok = self.find_abs_base(&e, base);
                         self.symtab.syms[s].flags &= !INEVAL;
                         ok
@@ -870,7 +871,7 @@ impl Assembler {
                 let s = *s;
                 self.update_curpc(s, sec, pc);
                 if self.symtab.syms[s].kind == SymKind::Expression {
-                    let e = self.symtab.syms[s].expr.clone().unwrap_or(Expr::Num(0));
+                    let e = self.symtab.syms[s].expr.clone().unwrap_or_else(|| Rc::new(Expr::Num(0)));
                     return self.find_base_inner(&e, base, sec, pc);
                 }
                 *base = Some(s);

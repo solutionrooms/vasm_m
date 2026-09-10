@@ -4,6 +4,7 @@ use crate::errors::Arg;
 use crate::expr::Expr;
 use crate::types::Taddr;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum SymKind {
@@ -30,7 +31,7 @@ pub struct Symbol {
     pub name: String,
     pub kind: SymKind,
     pub flags: u32,
-    pub expr: Option<Expr>,
+    pub expr: Option<Rc<Expr>>,
     pub size: Option<Expr>,
     pub sec: Option<usize>,
     pub pc: Taddr,
@@ -144,7 +145,7 @@ impl Assembler {
             let s = &mut self.symtab.syms[i];
             s.kind = SymKind::Expression;
             s.sec = None;
-            s.expr = Some(tree);
+            s.expr = Some(Rc::new(tree));
             s.version = s.version.wrapping_add(1);
             i
         } else {
@@ -152,7 +153,7 @@ impl Assembler {
                 name: name.to_string(),
                 kind: SymKind::Expression,
                 flags: 0,
-                expr: Some(tree),
+                expr: Some(Rc::new(tree)),
                 size: None,
                 sec: None,
                 pc: 0,
@@ -188,7 +189,7 @@ impl Assembler {
     /// set_internal_abs()
     pub fn set_internal_abs(&mut self, name: &str, val: Taddr) -> usize {
         let i = self.internal_abs(name);
-        self.symtab.syms[i].expr = Some(Expr::Num(val));
+        self.symtab.syms[i].expr = Some(Rc::new(Expr::Num(val)));
         self.symtab.syms[i].version = self.symtab.syms[i].version.wrapping_add(1);
         i
     }

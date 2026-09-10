@@ -38,7 +38,7 @@ pub struct Source {
     pub srcptr: usize,
     pub line: i32,
     pub reptn: i64,
-    pub cargexp: Option<Expr>,
+    pub cargexp: Option<Rc<Expr>>,
 }
 
 pub struct Macro {
@@ -406,7 +406,7 @@ impl Assembler {
         let carg = self.internal_abs(CARGSYM);
         let cs = self.cur_src.unwrap();
         self.sources[cs].cargexp = self.symtab.syms[carg].expr.clone();
-        self.symtab.syms[carg].expr = Some(Expr::Num(1));
+        self.symtab.syms[carg].expr = Some(Rc::new(Expr::Num(1)));
         self.cur_src = Some(src);
         true
     }
@@ -435,7 +435,7 @@ impl Assembler {
         if self.symtab.syms[carg].kind != SymKind::Expression {
             return Vec::new();
         }
-        let mut e = self.symtab.syms[carg].expr.clone().unwrap_or(Expr::Num(0));
+        let mut e = self.symtab.syms[carg].expr.as_ref().map(|e| (**e).clone()).unwrap_or(Expr::Num(0));
         self.simplify_expr(&mut e);
         let val = match e {
             Expr::Num(v) => v,
@@ -444,13 +444,13 @@ impl Assembler {
                 return Vec::new();
             }
         };
-        self.symtab.syms[carg].expr = Some(Expr::Num(val));
+        self.symtab.syms[carg].expr = Some(Rc::new(Expr::Num(val)));
         let r = self.macro_param(src, val - 1);
         if inc != 0 {
             let op = if inc > 0 { Op::Add } else { Op::Sub };
             let mut ne = Expr::Bin(op, Box::new(Expr::Num(val)), Box::new(Expr::Num(1)));
             self.simplify_expr(&mut ne);
-            self.symtab.syms[carg].expr = Some(ne);
+            self.symtab.syms[carg].expr = Some(Rc::new(ne));
         }
         r
     }
@@ -531,7 +531,7 @@ impl Assembler {
                 np = p + (e - 1);
                 if let Some(sym) = self.find_symbol(&name) {
                     if self.symtab.syms[sym].kind == SymKind::Expression {
-                        let ex = self.symtab.syms[sym].expr.clone().unwrap_or(Expr::Num(0));
+                        let ex = self.symtab.syms[sym].expr.clone().unwrap_or_else(|| Rc::new(Expr::Num(0)));
                         let (v, cnst) = self.eval_expr(&ex, None, 0);
                         if cnst {
                             val = Some(v as u32);
