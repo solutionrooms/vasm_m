@@ -2,18 +2,19 @@
 """Check the local reference assembler against independently specified bytes."""
 
 from pathlib import Path
+import os
 import subprocess
 import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ASSEMBLER = ROOT / "vasm" / "vasmm68k_mot"
+ASSEMBLER = Path(os.environ.get("REF", str(ROOT / "vasm-1.7h" / "vasmm68k_mot"))).resolve()
 EXPECTED = bytes.fromhex("702a 5280 6002 4e71 4e75 1234 89abcdef")
 
 
 def main():
     if not ASSEMBLER.is_file():
-        raise SystemExit("Build first: make -C vasm -f Makefile.macOS CPU=m68k SYNTAX=mot")
+        raise SystemExit(f"Reference assembler missing: {ASSEMBLER}. Build vasm-1.7h or set REF.")
     with tempfile.TemporaryDirectory(prefix="vasm-reference-") as directory:
         output = Path(directory) / "encoding.bin"
         command = [str(ASSEMBLER), "-quiet", "-m68000", "-Fbin", "-o", str(output)]
