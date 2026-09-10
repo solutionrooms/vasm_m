@@ -25,6 +25,13 @@ pub enum Expr {
 }
 
 impl Expr {
+    pub fn depth(&self) -> usize {
+        match self {
+            Expr::Un(_, l) => 1 + l.depth(),
+            Expr::Bin(_, l, r) => 1 + l.depth().max(r.depth()),
+            _ => 1,
+        }
+    }
     #[inline]
     pub fn is_const_leaf(&self) -> bool {
         matches!(self, Expr::Num(_) | Expr::Huge(_) | Expr::Flt(_))
@@ -503,6 +510,30 @@ impl Assembler {
                         let b = std::mem::replace(&mut **lr, Expr::Num(0));
                         // tree = a - (b - x)
                         *tree = Expr::Bin(Op::Sub, Box::new(a), Box::new(Expr::Bin(Op::Sub, Box::new(b), Box::new(x))));
+                    }
+                }
+            }
+        }
+        // Flatten (X +/- a) +/- b with constant a, b into X +/- c. Exact under
+        // wrapping 32-bit arithmetic and invisible to eval_expr/find_base
+        // (right operand stays a constant), but keeps `SET` chains shallow.
+        if let Expr::Bin(op2 @ (Op::Add | Op::Sub), l, r) = tree {
+            if let Expr::Num(b) = **r {
+                if let Expr::Bin(op1 @ (Op::Add | Op::Sub), _, ir) = &**l {
+                    if let Expr::Num(a) = **ir {
+                        let (op1, op2, b) = (*op1, *op2, b);
+                        let sa = if op1 == Op::Add { a } else { a.wrapping_neg() };
+                        let sb = if op2 == Op::Add { b } else { b.wrapping_neg() };
+                        let c = sa.wrapping_add(sb);
+                        let x = match &mut **l {
+                            Expr::Bin(_, il, _) => std::mem::replace(&mut **il, Expr::Num(0)),
+                            _ => unreachable!(),
+                        };
+                        *tree = if c < 0 && c != i32::MIN {
+                            Expr::Bin(Op::Sub, Box::new(x), Box::new(Expr::Num(c.wrapping_neg())))
+                        } else {
+                            Expr::Bin(Op::Add, Box::new(x), Box::new(Expr::Num(c)))
+                        };
                     }
                 }
             }

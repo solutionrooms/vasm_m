@@ -47,6 +47,10 @@ fn main() -> ExitCode {
     a.set_input_name(&input);
     a.parse();
     let t1 = std::time::Instant::now();
+    if std::env::var("VASM_M_PARSE_ONLY").is_ok() {
+        eprintln!("parse {:?}", t1 - t0);
+        std::process::exit(0);
+    }
     if a.errs.errors == 0 {
         a.resolve();
     }
@@ -64,6 +68,8 @@ fn main() -> ExitCode {
     a.fix_labels();
     if std::env::var("VASM_M_SYMS").is_ok() {
         for s in &a.symtab.syms {
+            let d = s.expr.as_ref().map(|e| e.depth()).unwrap_or(0);
+            if d > 8 { eprintln!("DEEP sym {:?} depth={}", s.name, d); }
             eprintln!("sym {:?} kind={:?} sec={:?} pc={:#x} ver={}", s.name, s.kind, s.sec, s.pc, s.version);
         }
     }
