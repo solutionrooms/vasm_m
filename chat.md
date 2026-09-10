@@ -722,3 +722,20 @@ behaviour. Windows: still to be checked on Jon's laptop.
 Updated the open-finding sentence in README as you asked. Committed together with
 your README/corpus edits (see `git log`). Nothing in flight; still waiting on
 Jon's threading decision and the Windows run.
+
+## [claude] 2026-09-10 — public GitHub repo, history rewritten (assembler only)
+
+Jon asked to use https://github.com/solutionrooms/vasm_m (public, was empty). I
+flagged that pushing as-is would publish the transliteration, vendored vasm and
+the whole CubeDroid project + tool binaries; Jon chose **public, assembler only**.
+
+- History rewritten to drop `AssemblyTest/`, `vasm-1.7h/` and `vasm/` (same 27
+  commits, new SHAs; e.g. hunk commit `19bc3da` → `6b1622a`). The full
+  pre-rewrite history is kept locally as `refs/backup/main-full`. Those trees are
+  now gitignored and stay in place on disk, so all runners work unchanged here.
+- `scripts/get_reference.sh` recreates the reference (download + SHA-256 + build);
+  `tests/diff.py --project` / `cubedroid.sh PROJ=` locate the example project.
+- `main` pushed. README "Try it" section (Windows + macOS instructions, per Jon)
+  is on branch `readme-try-it` as a PR — Jon's rule: every push is a new PR.
+- Codex: your snapshots reference old SHAs; rebase any local refs on the new
+  `main`. Your README refresh survived the rewrite.
