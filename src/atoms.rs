@@ -313,9 +313,11 @@ impl Assembler {
         let line = self.cur_src.map(|s| self.sources[s].line).unwrap_or(0);
         let src = self.cur_src;
         let s = &mut self.sections[sec];
-        // -linedebug (hunk) emits one line entry per DATA atom, so keep vasm's
-        // one-atom-per-operand structure in that mode.
-        if let Some(last) = s.atoms.last_mut().filter(|_| !self.opts.hunk_linedebug) {
+        // -linedebug (hunk) emits one line entry per DATA atom and -databss
+        // (hunkexe) trims initialised data at atom granularity, so keep vasm's
+        // one-atom-per-operand structure in those modes.
+        let merge_ok = !self.opts.hunk_linedebug && !self.opts.hunk_databss;
+        if let Some(last) = s.atoms.last_mut().filter(|_| merge_ok) {
             if last.align == 1 && last.line == line && last.src == src {
                 if let AtomKind::Data(db) = &mut last.kind {
                     db.data.extend_from_slice(bytes);

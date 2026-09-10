@@ -269,9 +269,12 @@ impl Assembler {
                     self.sections[fs].flags |= HAS_SYMBOLS;
                     self.symtab.syms[si].sec = Some(fs);
                 }
-                // assign symbols to the section they are defined in
-                // (vasm reads sec->idx even for a deleted first section, where
-                // it is uninitialised; 0 is the practical value)
+                // assign symbols to the section they are defined in.
+                // Deliberate choice: vasm reads sec->idx of a *deleted* first
+                // section here (an exported equate with an empty first section),
+                // and new_section() never initialises idx. Codex observed the
+                // 1.7h Mac build behaving as idx 0 (equate lands in the first
+                // remaining hunk); we make that deterministic.
                 let i = self.symtab.syms[si].sec.and_then(|s| idx.get(s).copied().flatten()).unwrap_or(0) as usize;
                 secsyms[i].push(si);
             }

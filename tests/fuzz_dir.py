@@ -183,7 +183,7 @@ def run_one(args):
     idx, text, spaces, tmp = args
     src = tmp / f"d{idx:04d}.s"
     src.write_text(text)
-    flags = ["-quiet", f"-F{FORMAT}", "-m68000"] + (["-spaces"] if spaces else [])
+    flags = ["-quiet", f"-F{FORMAT}", "-m68000"] + (["-spaces"] if spaces else []) + FLAGS
     rf, nf = tmp / f"d{idx:04d}.ref", tmp / f"d{idx:04d}.out"
     try:
         r = subprocess.run([str(REF), *flags, "-o", str(rf), str(src)], capture_output=True, text=True, timeout=20)
@@ -201,6 +201,7 @@ def run_one(args):
     return "OK" if r.returncode == 0 else "REJECTED"
 
 FORMAT = "bin"
+FLAGS = []
 
 def main():
     ap = argparse.ArgumentParser()
@@ -208,10 +209,12 @@ def main():
     ap.add_argument("--lines", type=int, default=40)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--format", default="bin", help="output format to compare (bin, hunk, hunkexe)")
+    ap.add_argument("--flags", default="", help="extra flags for both assemblers, e.g. '-databss' (use --flags=-x form)")
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
     a = ap.parse_args()
-    global FORMAT
+    global FORMAT, FLAGS
     FORMAT = a.format
+    FLAGS = a.flags.split()
     rng = random.Random(a.seed)
     tmp = Path(tempfile.mkdtemp(prefix="vasm_m_fdir_"))
     jobs = []

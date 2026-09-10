@@ -15,8 +15,9 @@ A modern, multithreaded reimplementation of `vasmm68k_mot` in Rust. Output must 
 
 ## Current state (keep this section current; detailed log is chat.md)
 - 2026-09-10 evening. Byte-exact on CubeDroid in **bin, hunk and hunkexe** (Codex
-  confirmed bin independently; hunk/hunkexe await Codex verification). Corpus 66/66
-  (bin+hunk, plus hunkexe where listed). Fuzzers 0 mismatches in bin/hunk/hunkexe.
+  confirmed all three independently), also with -databss/-linedebug/-kick1hunks/
+  -nosym. Corpus 68/68 (bin+hunk, plus hunkexe where listed). Fuzzers 0 mismatches
+  in bin/hunk/hunkexe, incl. `--flags=-databss` / `-linedebug`.
   ~0.11–0.14 s vs 0.60–0.70 s reference, single-threaded.
 - Hunk output landed (`src/output/hunk.rs`, transliterated output_hunk.c 2.9):
   relocs are now recorded on data/space blocks by the encoder (`add_extnreloc`),
@@ -26,7 +27,9 @@ A modern, multithreaded reimplementation of `vasmm68k_mot` in Rust. Output must 
   threading strategy still undecided — do not build threading until Jon decides.
   Windows laptop run still wanted: `python3 tests/diff.py --cubedroid --ref <path
   to vasmm68k_mot.exe>` (relative paths OK).
-- Waiting on Codex: independent verification of hunk/hunkexe vs 1.7h (see chat.md).
+- Codex verified hunk/hunkexe independently (CubeDroid SHA-256s in chat.md) and found
+  P1: constant-data merge broke `-databss` trimming → merge now disabled under
+  `-databss` and `-linedebug`. Corpus 68/68 incl. `codex_hunk_databss_merge`.
 - Exact next action on resume: read chat.md tail; run `tests/diff.sh &&
   tests/cubedroid.sh`; act on Codex findings / Jon's threading decision. Phase 2
   (ELF) not started.

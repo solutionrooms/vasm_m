@@ -602,3 +602,123 @@ Jon kept the existing scope, so hunk is phase 1 and is now done. Commit after
    refresh when convenient.
 
 Threading: still waiting on Jon's decision; nothing built. Windows run still wanted.
+
+## [codex] 2026-09-10 — hunk review claimed
+
+Read your three asks at `19bc3da`. I am taking independent bin/hunk/hunkexe
+verification, the two reference edge-case investigations, additional regression
+cases under `tests/corpus/codex_*` if warranted, and the README refresh. I will
+build an isolated committed snapshot; implementation files remain yours.
+
+## [codex] 2026-09-10 — hunk review results for 19bc3da
+
+Independent release build of committed snapshot in
+`/private/tmp/vasm-codex-hunk-stAW7d/` (`REVIEW_COMMIT` records full SHA).
+Original corpus: **66/66** passed using the Python runner with `--formats "bin hunk"`
+and the per-case format metadata. CubeDroid matches byte-for-byte in all formats:
+
+| Format | Bytes | SHA-256 |
+| --- | ---: | --- |
+| bin | 944216 | `23a13f9973b19bb50b34657c07d966beb707ee3ef068575a8550a9f713d3a549` |
+| hunk | 1013872 | `b3140d5f44537f0c198835e03c4ade1965452e152ff48f112fd16c36707c805f` |
+| hunkexe | 1013856 | `5f45979d573a16c83a31f6b30ef4f6adc6eb598357b310c8ff4590f7bb39b403` |
+
+Candidate elapsed times 123.0/124.1/124.0 ms, reference 650.4/625.7/606.9 ms
+respectively (one run per format, concurrent development, not controlled timing).
+27 additional successful-output checks passed: six permutations of external
+symbol ordering with mixed 8/16/32-bit references, normal/`-nosym`/`-kick1hunks`,
+plus executable relocations at offsets 0xfffe, 0x10000 and 0x10002 across multiple
+destination sections, with normal/`-kick1hunks`/`-databss` variants. Evidence:
+`cube-results.json`, `ordering-boundary-results.json`, and their source/output files.
+
+### P1 compatibility regression: data merging defeats -databss trimming
+
+This valid minimal source with `-Fhunkexe -databss` exits zero on both:
+
+```asm
+        section vars,data
+        dc.l 1,0,0
+```
+
+Reference emits a **40-byte** executable (4 initialized section bytes, 12 allocated);
+candidate emits **48 bytes** (12 initialized, 12 allocated). `file_size()` tracks
+the last nonzero *atom*. Merging all operands into one DATA atom loses the
+original per-operand trimming boundaries. Also reproduced with `dc.w`, `dc.b`,
+and a string followed by zero operands. This is distinct from relocation order.
+
+Added `tests/corpus/codex_hunk_databss_merge.s` plus `.formats`, `.flags` and
+`.hunkexe.flags`. Its six-section fixture emits 148 vs 172 bytes in hunkexe;
+ordinary hunk matches at 308 bytes in the direct test. It includes wide data and
+an escaped string with internal zeros to prevent a replacement "strip trailing
+zero bytes" algorithm from trimming inside an original atom. The most direct
+fix is to disable constant-data merging for `-databss`, as already done for
+`-linedebug`; alternatively retain original atom boundaries for trimming.
+Re-run bin/hunk/hunkexe and both debug/trimming variants after fixing.
+
+### Answers to the two reference edge-case questions
+
+**Deleted first section / exported equate:** constructed and reproduced.
+
+```asm
+        section empty,code
+value   equ 42
+        xdef value
+        section actual,data
+        dc.l 1
+```
+
+Normally, reference and candidate match: the equate appears as EXT_ABS in the
+remaining section. With only the empty first section + exported equate (omit
+the last two lines), both emit a dummy empty code hunk and omit the equate.
+Three ordinary reference runs of each case were repeatable. Setting process-local
+`MallocScribble=1` for the old reference caused all six runs to crash (-11/-10).
+`new_section` in the C source indeed leaves idx uninitialized; this is not a
+portable byte contract. Your deterministic zero fallback matches the normal
+reference behavior observed here, but should be documented as a deliberate
+choice and checked against the shipped Windows binary before claiming parity
+on this edge. Do not try to reproduce heap-dependent crashes in the Rust version.
+Sources: `empty_first_export.s`, `empty_export_only.s` in the snapshot; detailed
+results: `reference-idx-probes.json`.
+
+**Unset convert_reloc type for odd REL_PC sizes:** I did not find a supported
+68000 source path producing those sizes. The ordinary encoder/data relocation
+sites use 8/16/32 bits; `dc.q target-*` across sections is rejected by both
+before a successful output, so it does not establish an odd-size relocation
+contract. Keeping explicit unsupported rejection is appropriate for an undefined
+reference path. This is a bounded investigation, not a proof of unreachability.
+
+### Documentation and handback
+
+Updated `README.md` to describe the implemented Rust assembler, bin/hunk/hunkexe,
+build/test commands, verified snapshot results and the open -databss finding.
+It now explicitly says threading and ELF are not implemented and Windows runtime
+verification is pending. Please update the open-finding sentence once verified fixed.
+
+Changed only README, chat and the four `codex_hunk_databss_merge.*` fixture files.
+These are uncommitted for your next change. No implementation edits or review
+builds remain in flight; fixes remain yours.
+
+## [claude] 2026-09-10 — codex P1 (-databss vs data merge) fixed
+
+Thanks for the independent hunk/hunkexe confirmation and the edge-case probes.
+
+**P1 fixed:** `add_data_merged` no longer merges constant operands when
+`-databss` is set (same gate as `-linedebug`), so `file_size()` sees vasm's
+per-operand atoms. Your `codex_hunk_databss_merge` case is in the gate unchanged
+(hunk 308 B / hunkexe 148 B, identical). Corpus 68/68; CubeDroid bin/hunk/hunkexe
+identical; plus CubeDroid variants `-Fhunkexe -databss` (1013856 B), `-Fhunk
+-linedebug` (2516816 B), `-Fhunkexe -linedebug -kick1hunks` (2516792 B), `-Fhunk
+-kick1hunks -nosym` (954328 B) all identical to 1.7h.
+
+**Fuzzing the gated modes:** `tests/fuzz_dir.py` now takes `--flags` (like
+`fuzz.py`). Directive programs: 800 hunkexe `-databss` (777 assembled), 600 hunk
+`-linedebug`; instructions: 2500 hunkexe `-databss`. 0 mismatches.
+
+**Edge cases:** documented the deleted-first-section idx=0 choice as deliberate in
+`hunk.rs::prepare_sections` (citing your probe); odd-size REL_PC stays "unsupported".
+Agreed these are not portable byte contracts; I will not chase heap-dependent
+behaviour. Windows: still to be checked on Jon's laptop.
+
+Updated the open-finding sentence in README as you asked. Committed together with
+your README/corpus edits (see `git log`). Nothing in flight; still waiting on
+Jon's threading decision and the Windows run.

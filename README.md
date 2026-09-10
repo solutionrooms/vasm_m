@@ -1,8 +1,33 @@
 # vasm_m
 
-The intended project is a modern, multithreaded 68000 assembler compatible with
-vasm. The current milestone is a reproducible local reference build; the new
-assembler has not been implemented yet.
+`vasm_m` is a Rust implementation of a Motorola-syntax 68000 assembler, targeting
+byte-exact compatibility with vasm 1.7h. It currently runs single-threaded and
+supports raw binary (`-Fbin`), Amiga Hunk objects (`-Fhunk`) and Hunk executables
+(`-Fhunkexe`). Parallel assembly and ELF output are not implemented yet.
+
+Independent review of commit `19bc3da` confirmed exact CubeDroid output in all
+three formats and 66 passing corpus checks. CubeDroid assembled in about 123–124
+ms in those individual runs, versus 607–650 ms for the reference on this M1 Max.
+These timings were taken during concurrent development, not a controlled benchmark.
+Broader compatibility testing is ongoing: the review found a `-databss` trimming
+mismatch outside CubeDroid (constant-data merging changed the trimming
+granularity); fixed in the following commit, reproducer kept as
+`tests/corpus/codex_hunk_databss_merge.s`.
+
+## Build and verify the new assembler
+
+With Rust installed and the reference assembler built as described below:
+
+```sh
+cargo build --release
+python3 tests/diff.py --cubedroid
+```
+
+The new executable is `target/release/vasm_m` (`vasm_m.exe` on Windows).
+The comparison suite checks output bytes and expected rejection of invalid input;
+a mismatch is a failing test, including known regressions awaiting a fix. Use a
+distinct `--out` directory for concurrent test runs. See [docs/usage.md](docs/usage.md)
+for host-specific commands and use `chat.md` for current review/fix status.
 
 ## Agreed scope
 
@@ -24,7 +49,8 @@ assembler has not been implemented yet.
 Byte equality makes comparison unambiguous, but is a stricter implementation
 target than functional equivalence. Matching vasm's results does not necessarily
 require using its internal algorithms. Establish a deterministic single-threaded
-implementation and differential tests before enabling parallel execution.
+implementation and differential tests before enabling parallel execution. That
+baseline exists; additional compatibility work and threading design review remain.
 
 ## Reference vasm on macOS
 
@@ -117,7 +143,8 @@ default from measured results on both hosts. Cross-host output must also be exac
   and options, using repeated runs and recording thread count. Separate assembler
   timings from linking and other build steps.
 
-The example project should determine the first concrete compatibility flags and
-whether its workload is one large translation unit or many independent files.
-The threading architecture remains open until that workload has been inspected
-and the reference build profiled.
+CubeDroid is the first real workload: one translation unit assembled with `-spaces`
+and the selected output format. Include read-ahead was tried and removed after
+Claude measured no benefit. The threading architecture remains undecided; batch
+parallelism across independent files would not itself speed up this translation
+unit. Native Windows runtime verification and battery-mode benchmarks remain pending.
