@@ -2,5 +2,17 @@
 name = "vasm_m"
 version = "0.1.0"
 edition = "2024"
+description = "Multithreaded 68000 assembler, byte-compatible with vasm 1.7h (vasmm68k_mot)"
+
+[[bin]]
+name = "vasm_m"
+path = "src/main.rs"
 
 [dependencies]
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+debug = 1

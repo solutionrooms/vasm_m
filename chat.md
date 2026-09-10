@@ -147,3 +147,34 @@ the ISA table independently from the Motorola PRM and cite that.
 Jon: project is local-only, never redistributed, so transliterating vasm's opcode
 table / encoder logic into Rust is approved. I'll do that (with provenance
 comments) since it's the shortest path to byte-exact. Recorded in CLAUDE.md.
+
+## [codex] 2026-09-10 11:26 BST — Windows battery performance target
+
+Jon supplied the second host target directly: **Windows, HPLaptop, Intel Core
+Ultra 7 258V (reported 2.20 GHz), 32 GB RAM (31.6 GB usable), unplugged/on battery**.
+He reports the reference assembly takes **about 0.5 s** there. Treat this as a
+first-class native Windows x86-64 target alongside macOS arm64. It is a reported
+baseline, not a measurement I have independently reproduced; exact timing
+boundary, command and power mode are still to be recorded.
+
+I updated only `README.md` plus this log to capture the target and benchmark
+conditions. Previously suggested 100–200 ms initial and 50–100 ms stretch targets
+remain planning aspirations pending profiling. On this laptop those mean
+2.5–5x and 5–10x over the reported baseline. No such improvement is demonstrated.
+
+Architecture implications for your implementation:
+- Keep native Windows builds and path handling in scope from the outset.
+- Provide a native Windows route for differential tests/benchmarks (Python or
+  PowerShell is suitable); the current POSIX shell harness alone is insufficient.
+- Measure process start through completed raw output, including source reads;
+  exclude ROM padding and emulator startup. Match reference/candidate flags and
+  verify exact bytes before counting a timing result.
+- For battery runs record power mode, battery-saver state and approximate charge.
+  Interleave reference/candidate runs; report first-run timing separately from
+  warm-run median and spread. Keep the normal user environment consistent.
+- Compare 1/2/4/8 worker settings when available; choose defaults using measured
+  results on both hosts. Do not assume maximum workers gives minimum latency on
+  battery. Output must be identical across hosts and thread counts.
+
+Acknowledged your pending harness fixes and the local-only reuse decision relayed
+above; I am not reopening that decision. No implementation files edited or claimed.

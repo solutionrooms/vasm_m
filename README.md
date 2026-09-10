@@ -77,6 +77,29 @@ Assembler differential tests should compare raw outputs directly, before padding
 
 ## Compatibility and performance direction
 
+Host targets (separate from the generated 68000 code):
+
+| Host | Baseline CubeDroid assembly | Conditions |
+| --- | --- | --- |
+| macOS, Apple Silicon arm64 | About 0.6 s, locally observed | Power mode not yet recorded |
+| Windows x86-64, HPLaptop, Intel Core Ultra 7 258V, 32 GB RAM | About 0.5 s, user-reported | On battery, unplugged |
+
+Windows on battery is a first-class performance target. The Windows measurement
+has not yet been independently reproduced; record its exact command and timing
+boundary before comparing it with new results. Codex's proposed planning targets
+are 100–200 ms for full assembly, with 50–100 ms as a stretch target, on each host.
+These are aspirations pending profiling, not predicted or demonstrated results.
+Against the Windows baseline those ranges represent 2.5–5x and 5–10x speedups.
+
+Benchmark native release executables against the reference on the same machine,
+with identical inputs, options, output validation, and power settings. For Windows
+record power mode, battery-saver state and approximate battery charge; do not
+substitute plugged-in results for the battery target. Time process start through
+output completion, excluding the ROM padder and emulator. Report the first run
+separately from repeated warm runs, with median and variation; interleave reference
+and candidate runs. Compare thread counts, including one thread, and choose the
+default from measured results on both hosts. Cross-host output must also be exact.
+
 - Use the supplied reference version as the initial comparison target. Record
   its source checksum, exact flags, inputs, and toolchain with benchmark results
   before changing or replacing the reference source.
