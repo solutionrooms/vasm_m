@@ -182,8 +182,8 @@ impl Assembler {
         let n = self.saved_symcount;
         if self.symtab.syms.len() > n {
             for i in n..self.symtab.syms.len() {
-                let name = self.symtab.syms[i].name.clone();
-                let key = if self.symtab.nocase { name.to_ascii_lowercase() } else { name };
+                let name = self.symtab.syms[i].name.as_bytes();
+                let key: Vec<u8> = if self.symtab.nocase { name.to_ascii_lowercase() } else { name.to_vec() };
                 if self.symtab.map.get(&key) == Some(&i) {
                     self.symtab.map.remove(&key);
                 }

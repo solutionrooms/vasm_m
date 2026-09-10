@@ -67,15 +67,15 @@ pub const OCMD_CHKTYPE: u8 = 31;
 pub const OCMD_NOWARN: u8 = 32;
 
 /// mnemonic hash: lowercase name -> first table index (mgas rows removed, as init_cpu does)
-fn mnemo_map() -> &'static HashMap<String, usize> {
-    static M: OnceLock<HashMap<String, usize>> = OnceLock::new();
+fn mnemo_map() -> &'static HashMap<Vec<u8>, usize> {
+    static M: OnceLock<HashMap<Vec<u8>, usize>> = OnceLock::new();
     M.get_or_init(|| {
         let mut m = HashMap::new();
         let mut i = 0;
         while i < MNEMONICS.len() {
             let name = MNEMONICS[i].name;
             if !name.is_empty() {
-                m.entry(name.to_ascii_lowercase()).or_insert(i);
+                m.entry(name.to_ascii_lowercase().into_bytes()).or_insert(i);
             }
             let mut j = i + 1;
             while j < MNEMONICS.len() && MNEMONICS[j].name == name {
@@ -87,7 +87,7 @@ fn mnemo_map() -> &'static HashMap<String, usize> {
         let mut i = 0;
         while i < MNEMONICS.len() {
             if MNEMONICS[i].available & mgas != 0 {
-                m.remove(&MNEMONICS[i].name.to_ascii_lowercase());
+                m.remove(MNEMONICS[i].name.to_ascii_lowercase().as_bytes());
                 while i + 1 < MNEMONICS.len() && MNEMONICS[i].name == MNEMONICS[i + 1].name {
                     i += 1;
                 }
@@ -99,7 +99,7 @@ fn mnemo_map() -> &'static HashMap<String, usize> {
 }
 
 pub fn mnemonic_exists(lname: &str) -> bool {
-    mnemo_map().contains_key(lname)
+    mnemo_map().contains_key(lname.as_bytes())
 }
 
 #[inline]
@@ -787,9 +787,14 @@ impl Assembler {
 
     /// new_inst(): mnemonic selection (atom.c)
     pub fn new_inst(&mut self, inst: usize, len: usize, ops: &[(usize, usize)]) -> Option<Instruction> {
-        let lname = lower_string(&self.line[inst..inst + len]);
+        let mut lbuf = [0u8; 32];
+        let ll = len.min(32);
+        for (k, b) in self.line[inst..inst + ll].iter().enumerate() {
+            lbuf[k] = b.to_ascii_lowercase();
+        }
+        let lname = &lbuf[..ll];
         let mut inst_found = 0;
-        if let Some(&first) = mnemo_map().get(&lname) {
+        if let Some(&first) = mnemo_map().get(lname) {
             let mut i = first;
             loop {
                 inst_found = 1;
@@ -824,7 +829,7 @@ impl Assembler {
                 if j < mnemo_opcnt || k < ops.len() {
                     i += 1;
                     self.restore_symbols();
-                    if i < MNEMONICS.len() && MNEMONICS[i].name.eq_ignore_ascii_case(&lname) {
+                    if i < MNEMONICS.len() && MNEMONICS[i].name.len() == ll && MNEMONICS[i].name.as_bytes().eq_ignore_ascii_case(lname) {
                         continue;
                     }
                     break;

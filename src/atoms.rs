@@ -325,28 +325,29 @@ impl Assembler {
         }
         self.memo_misses += 1;
         let (code_in, qual_in, flags_in, last_in) = (ip.code, ip.qual, ip.ext.flags, ip.ext.last_size);
-        let mut deps: Vec<(u32, u32)> = match ip.memo.take() {
-            Some(m) => { let mut d = m.deps; d.clear(); d }
-            None => Vec::new(),
+        let mut memo = match ip.memo.take() {
+            Some(mut m) => { m.deps.clear(); m }
+            None => Box::new(crate::m68k::InstMemo {
+                deps: Vec::new(), pc: 0, last_size_in: 0, flags_in: 0, code_in: 0, qual_in: 0,
+                resolvewarn: false, size: 0, last_size_out: 0,
+            }),
         };
         for o in ip.op.iter().flatten() {
             for v in o.value.iter().flatten() {
-                self.collect_deps(v, &mut deps);
+                self.collect_deps(v, &mut memo.deps);
             }
         }
         let size = self.instruction_size(ip, sec, pc);
         // key = the pre-call state (what vasm's instruction_size() saw)
-        ip.memo = Some(Box::new(crate::m68k::InstMemo {
-            deps,
-            pc,
-            last_size_in: last_in,
-            flags_in,
-            code_in,
-            qual_in,
-            resolvewarn,
-            size,
-            last_size_out: ip.ext.last_size,
-        }));
+        memo.pc = pc;
+        memo.last_size_in = last_in;
+        memo.flags_in = flags_in;
+        memo.code_in = code_in;
+        memo.qual_in = qual_in;
+        memo.resolvewarn = resolvewarn;
+        memo.size = size;
+        memo.last_size_out = ip.ext.last_size;
+        ip.memo = Some(memo);
         size
     }
 

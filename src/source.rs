@@ -654,7 +654,8 @@ impl Assembler {
         let mut s = self.sources[cs].srcptr;
         let nparam = self.sources[cs].num_params;
         let mut rept_end: Option<usize> = None;
-        let mut d: Vec<u8> = Vec::with_capacity(INITLINELEN);
+        let mut d: Vec<u8> = std::mem::take(&mut self.line);
+        d.clear();
         d.push(0);
 
         if let Some(enddir) = self.enddir_list {

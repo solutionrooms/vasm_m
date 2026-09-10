@@ -56,21 +56,30 @@ impl Symbol {
 #[derive(Default)]
 pub struct SymTab {
     pub syms: Vec<Symbol>,
-    pub map: HashMap<String, usize>,
+    pub map: HashMap<Vec<u8>, usize>,
     pub nocase: bool,
     pub last_global_label: String,
     pub tmplabcnt: u64,
 }
 
 impl SymTab {
-    fn key(&self, name: &str) -> String {
-        if self.nocase { name.to_ascii_lowercase() } else { name.to_string() }
+    fn key(&self, name: &[u8]) -> Vec<u8> {
+        if self.nocase { name.to_ascii_lowercase() } else { name.to_vec() }
     }
+    /// find by str name
     pub fn find(&self, name: &str) -> Option<usize> {
-        self.map.get(&self.key(name)).copied()
+        self.find_bytes(name.as_bytes())
+    }
+    /// find by raw bytes without allocating (unless -nocase)
+    pub fn find_bytes(&self, name: &[u8]) -> Option<usize> {
+        if self.nocase {
+            self.map.get(&name.to_ascii_lowercase()).copied()
+        } else {
+            self.map.get(name).copied()
+        }
     }
     fn add(&mut self, sym: Symbol) -> usize {
-        let k = self.key(&sym.name);
+        let k = self.key(sym.name.as_bytes());
         let idx = self.syms.len();
         self.syms.push(sym);
         self.map.insert(k, idx);
@@ -78,7 +87,7 @@ impl SymTab {
     }
     /// refer_symbol(): make refname an alias of sym
     pub fn refer(&mut self, sym: usize, refname: &str) {
-        let k = self.key(refname);
+        let k = self.key(refname.as_bytes());
         self.map.insert(k, sym);
     }
 }

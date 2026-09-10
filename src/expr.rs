@@ -159,10 +159,15 @@ impl Assembler {
             let cpc = self.curpc_sym();
             return Expr::Sym(cpc);
         }
-        if let Some((name, np)) = self.parse_identifier(*p) {
-            *p = np;
+        if let Some(e) = skip_identifier(&self.line, *p, self.opts.local_dots) {
+            let start = *p;
+            *p = e;
             *p = self.exp_skip(*p);
-            if self.find_symbol(&name).is_none() && name == "NARG" {
+            if let Some(sym) = self.symtab.find_bytes(&self.line[start..e]) {
+                return self.sym_expr_idx(sym);
+            }
+            let name = bytes_to_string(&self.line[start..e]);
+            if name == "NARG" {
                 let n = self.cur_src.map(|s| self.sources[s].num_params).unwrap_or(-1);
                 return Expr::Num(n);
             }
@@ -213,6 +218,10 @@ impl Assembler {
             Some(i) => i,
             None => self.new_import(name),
         };
+        self.sym_expr_idx(sym)
+    }
+
+    fn sym_expr_idx(&mut self, sym: usize) -> Expr {
         self.symtab.syms[sym].flags |= USED;
         if self.symtab.syms[sym].kind != SymKind::Expression {
             Expr::Sym(sym)
