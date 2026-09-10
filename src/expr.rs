@@ -22,6 +22,10 @@ pub enum Expr {
     Sym(usize),
     Un(Op, Box<Expr>),
     Bin(Op, Box<Expr>, Box<Expr>),
+    /// ((X op1 k1) op2 k2) ... with op in {Add, Sub} and constant k: evaluated
+    /// left to right in the evaluator's own domain, so it is exactly the nested
+    /// tree it replaces, but stays shallow when `SET` chains grow.
+    Chain(Box<Expr>, Vec<(Op, Taddr)>),
 }
 
 impl Expr {
@@ -29,6 +33,7 @@ impl Expr {
         match self {
             Expr::Un(_, l) => 1 + l.depth(),
             Expr::Bin(_, l, r) => 1 + l.depth().max(r.depth()),
+            Expr::Chain(x, _) => 1 + x.depth(),
             _ => 1,
         }
     }
@@ -507,6 +512,7 @@ impl Assembler {
                 self.simplify_expr(l);
                 self.simplify_expr(r);
             }
+            Expr::Chain(x, _) => self.simplify_expr(x),
             _ => {}
         }
         // Rearrange "const - sym - sym" so that "sym - sym" is evaluated first
@@ -523,27 +529,44 @@ impl Assembler {
                 }
             }
         }
-        // Flatten (X +/- a) +/- b with constant a, b into X +/- c. Exact under
-        // wrapping 32-bit arithmetic and invisible to eval_expr/find_base
-        // (right operand stays a constant), but keeps `SET` chains shallow.
+        // Turn ((X +/- a) +/- b) with constant a, b into a Chain node. The
+        // constants are NOT combined here: they are applied one by one at
+        // evaluation time in the evaluator's domain (i32 wrapping, i128 or f64),
+        // exactly like the nested tree, so a forward symbol resolving to a
+        // float or huge value evaluates identically.
         if let Expr::Bin(op2 @ (Op::Add | Op::Sub), l, r) = tree {
             if let Expr::Num(b) = **r {
-                if let Expr::Bin(op1 @ (Op::Add | Op::Sub), _, ir) = &**l {
-                    if let Expr::Num(a) = **ir {
-                        let (op1, op2, b) = (*op1, *op2, b);
-                        let sa = if op1 == Op::Add { a } else { a.wrapping_neg() };
-                        let sb = if op2 == Op::Add { b } else { b.wrapping_neg() };
-                        let c = sa.wrapping_add(sb);
-                        let x = match &mut **l {
-                            Expr::Bin(_, il, _) => std::mem::replace(&mut **il, Expr::Num(0)),
-                            _ => unreachable!(),
-                        };
-                        *tree = if c < 0 && c != i32::MIN {
-                            Expr::Bin(Op::Sub, Box::new(x), Box::new(Expr::Num(c.wrapping_neg())))
-                        } else {
-                            Expr::Bin(Op::Add, Box::new(x), Box::new(Expr::Num(c)))
-                        };
+                let (op2, b) = (*op2, b);
+                match &mut **l {
+                    Expr::Chain(_, v) => {
+                        v.push((op2, b));
+                        let inner = std::mem::replace(&mut **l, Expr::Num(0));
+                        *tree = inner;
                     }
+                    Expr::Bin(op1 @ (Op::Add | Op::Sub), il, ir) => {
+                        if let Expr::Num(a) = **ir {
+                            let op1 = *op1;
+                            let x = std::mem::replace(&mut **il, Expr::Num(0));
+                            *tree = Expr::Chain(Box::new(x), vec![(op1, a), (op2, b)]);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        // A chain whose base folded to a constant folds sequentially in that
+        // constant's domain (same order as the nested tree would fold).
+        if let Expr::Chain(x, v) = tree {
+            if x.is_const_leaf() {
+                let mut acc = (**x).clone();
+                for (op, k) in v.iter() {
+                    acc = match self.fold(*op, &acc, Some(&Expr::Num(*k))) {
+                        Some(f) => f,
+                        None => break,
+                    };
+                }
+                if acc.is_const_leaf() {
+                    *tree = acc;
                 }
             }
         }
@@ -716,6 +739,13 @@ impl Assembler {
                 let (lv, lc) = self.eval_expr(l, sec, pc);
                 (self.num_op(*op, lv, 0).unwrap_or(0), lc)
             }
+            Expr::Chain(x, v) => {
+                let (mut val, cnst) = self.eval_expr(x, sec, pc);
+                for (op, k) in v.iter() {
+                    val = if *op == Op::Add { val.wrapping_add(*k) } else { val.wrapping_sub(*k) };
+                }
+                (val, cnst)
+            }
             Expr::Bin(op, l, r) => {
                 let (lv, lc) = self.eval_expr(l, sec, pc);
                 let (rv, rc) = self.eval_expr(r, sec, pc);
@@ -777,6 +807,13 @@ impl Assembler {
                     _ => None,
                 }
             }
+            Expr::Chain(x, v) => {
+                let mut val = self.eval_expr_huge(x)?;
+                for (op, k) in v.iter() {
+                    val = if *op == Op::Add { val.wrapping_add(*k as i128) } else { val.wrapping_sub(*k as i128) };
+                }
+                Some(val)
+            }
             Expr::Bin(op, l, r) => {
                 let lv = self.eval_expr_huge(l)?;
                 let rv = self.eval_expr_huge(r)?;
@@ -811,6 +848,13 @@ impl Assembler {
                 let lv = self.eval_expr_float(l)?;
                 match op { Op::Neg => Some(-lv), _ => None }
             }
+            Expr::Chain(x, v) => {
+                let mut val = self.eval_expr_float(x)?;
+                for (op, k) in v.iter() {
+                    val = if *op == Op::Add { val + *k as f64 } else { val - *k as f64 };
+                }
+                Some(val)
+            }
             Expr::Bin(op, l, r) => {
                 let lv = self.eval_expr_float(l)?;
                 let rv = self.eval_expr_float(r)?;
@@ -832,20 +876,35 @@ impl Assembler {
     }
 
     /// type_of_expr(): 1=NUM 2=HUG 3=FLT (0 = none)
-    pub fn type_of_expr(&self, tree: &Expr) -> u8 {
+    pub fn type_of_expr(&mut self, tree: &Expr) -> u8 {
         match tree {
             Expr::Num(_) => 1,
             Expr::Huge(_) => 2,
             Expr::Flt(_) => 3,
             Expr::Sym(s) => {
-                let sym = &self.symtab.syms[*s];
-                if sym.kind == SymKind::Expression {
-                    if sym.flags & INEVAL != 0 { return 1; }
-                    sym.expr.as_deref().map(|e| self.type_of_expr(e)).unwrap_or(1)
-                } else { 1 }
+                let s = *s;
+                let (flags, kind) = (self.symtab.syms[s].flags, self.symtab.syms[s].kind);
+                if flags & INEVAL != 0 {
+                    let name = self.symtab.syms[s].name.clone();
+                    self.general_error(18, &[Arg::from(name)]);
+                }
+                if kind == SymKind::Expression {
+                    self.symtab.syms[s].flags |= INEVAL;
+                    let e = self.symtab.syms[s].expr.clone();
+                    let t = e.as_deref().map(|e| self.type_of_expr(e)).unwrap_or(1);
+                    self.symtab.syms[s].flags &= !INEVAL;
+                    t
+                } else {
+                    1
+                }
             }
             Expr::Un(_, l) => self.type_of_expr(l),
-            Expr::Bin(_, l, r) => self.type_of_expr(l).max(self.type_of_expr(r)),
+            Expr::Chain(x, _) => self.type_of_expr(x),
+            Expr::Bin(_, l, r) => {
+                let a = self.type_of_expr(l);
+                let b = self.type_of_expr(r);
+                a.max(b)
+            }
         }
     }
 
@@ -884,7 +943,7 @@ impl Assembler {
                 }
             }
             Expr::Num(_) | Expr::Huge(_) | Expr::Flt(_) => true,
-            Expr::Un(_, l) => {
+            Expr::Un(_, l) | Expr::Chain(l, _) => {
                 if !self.find_abs_base(l, base) { return false; }
                 true
             }
@@ -911,11 +970,21 @@ impl Assembler {
                 let s = *s;
                 self.update_curpc(s, sec, pc);
                 if self.symtab.syms[s].kind == SymKind::Expression {
+                    if self.symtab.syms[s].flags & INEVAL != 0 {
+                        return Base::Illegal;
+                    }
                     let e = self.symtab.syms[s].expr.clone().unwrap_or_else(|| Rc::new(Expr::Num(0)));
-                    return self.find_base_inner(&e, base, sec, pc);
+                    self.symtab.syms[s].flags |= INEVAL;
+                    let r = self.find_base_inner(&e, base, sec, pc);
+                    self.symtab.syms[s].flags &= !INEVAL;
+                    return r;
                 }
                 *base = Some(s);
                 Base::Ok
+            }
+            Expr::Chain(x, _) => {
+                // (X op k) with constant k: BASE_OK iff X has a base
+                if self.find_base_inner(x, base, sec, pc) == Base::Ok { Base::Ok } else { Base::Illegal }
             }
             Expr::Bin(Op::Add, l, r) => {
                 if self.eval_expr(l, sec, pc).1 && self.find_base_inner(r, base, sec, pc) == Base::Ok {

@@ -75,18 +75,23 @@ far_f:\tnop
 """
 
 FLAGS = []
+TIMEOUT = 20
 
 def run_case(args):
     idx, line, tmp = args
     src = tmp / f"c{idx:06d}.s"
     src.write_text(TEMPLATE.format(line))
     rf, nf = tmp / f"c{idx:06d}.ref", tmp / f"c{idx:06d}.out"
-    r = subprocess.run([str(REF), "-quiet", "-Fbin", "-m68000", *FLAGS, "-o", str(rf), str(src)], capture_output=True, text=True)
-    n = subprocess.run([str(NEW), "-quiet", "-Fbin", "-m68000", *FLAGS, "-o", str(nf), str(src)], capture_output=True, text=True)
-    rs = 0 if r.returncode == 0 else 1
-    ns = 0 if n.returncode == 0 else 1
-    if rs != ns:
-        return (line, f"exit ref={r.returncode} new={n.returncode}\n  ref: {r.stderr.strip()[:200]}\n  new: {n.stderr.strip()[:200]}")
+    try:
+        r = subprocess.run([str(REF), "-quiet", "-Fbin", "-m68000", *FLAGS, "-o", str(rf), str(src)], capture_output=True, text=True, timeout=TIMEOUT)
+        n = subprocess.run([str(NEW), "-quiet", "-Fbin", "-m68000", *FLAGS, "-o", str(nf), str(src)], capture_output=True, text=True, timeout=TIMEOUT)
+    except subprocess.TimeoutExpired as e:
+        return (line, f"timeout: {e.cmd[0]}")
+    rs, ns = r.returncode, n.returncode
+    # agreement: same success, or reference rejection (1) matched by rejection (1);
+    # any other code (crash, signal, panic) is a failure
+    if not ((rs == 0 and ns == 0) or (rs == 1 and ns == 1)):
+        return (line, f"exit ref={rs} new={ns}\n  ref: {r.stderr.strip()[:200]}\n  new: {n.stderr.strip()[:200]}")
     if rs == 0:
         rb, nb = rf.read_bytes(), nf.read_bytes()
         if rb != nb:

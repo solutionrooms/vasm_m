@@ -14,9 +14,12 @@ ROOT = Path(__file__).resolve().parents[1]
 IS_WIN = os.name == "nt"
 EXE = ".exe" if IS_WIN else ""
 
-def run(cmd, cwd=None):
+def run(cmd, cwd=None, timeout=60):
     t0 = time.perf_counter()
-    p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    try:
+        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return 124, f"timeout after {timeout}s", time.perf_counter() - t0
     return p.returncode, p.stdout + p.stderr, time.perf_counter() - t0
 
 def main():
@@ -33,10 +36,11 @@ def main():
         sys.exit(f"reference vasm not built: {ref}")
     if not new.is_file():
         sys.exit(f"vasm_m not built: {new} (cargo build --release)")
-    out = Path(a.out)
+    out = Path(a.out) / "corpus"
     if out.exists():
         for f in out.iterdir():
-            f.unlink()
+            if f.is_file():
+                f.unlink()
     out.mkdir(parents=True, exist_ok=True)
     common = ["-quiet", "-m68000"]
     srcs = sorted((ROOT / "tests" / "corpus").glob("*.s"))

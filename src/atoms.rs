@@ -277,6 +277,29 @@ impl Assembler {
         self.add_atom_to(None, a)
     }
 
+    /// Append constant bytes to the current line's align-1 DATA atom, or start
+    /// a new one. Equivalent to one DATADEF atom per operand for output purposes.
+    pub fn add_data_merged(&mut self, bytes: &[u8]) {
+        let sec = match self.default_section() {
+            Some(s) => s,
+            None => { self.general_error(3, &[]); return; }
+        };
+        let line = self.cur_src.map(|s| self.sources[s].line).unwrap_or(0);
+        let src = self.cur_src;
+        let s = &mut self.sections[sec];
+        if let Some(last) = s.atoms.last_mut() {
+            if last.align == 1 && last.line == line && last.src == src {
+                if let AtomKind::Data(db) = &mut last.kind {
+                    db.data.extend_from_slice(bytes);
+                    last.lastsize += bytes.len();
+                    s.pc = s.pc.wrapping_add(bytes.len() as Taddr);
+                    return;
+                }
+            }
+        }
+        self.add_atom_to(Some(sec), Atom::data(DBlock { data: bytes.to_vec() }, 1));
+    }
+
     /// add_atom(sec, a)
     pub fn add_atom_to(&mut self, sec: Option<usize>, mut a: Atom) {
         let sec = match sec.or_else(|| self.default_section()) {
@@ -361,18 +384,17 @@ impl Assembler {
                     return;
                 }
                 let sym = &self.symtab.syms[s];
-                if !out.iter().any(|&(x, _)| x as usize == s) {
-                    out.push((s as u32, sym.version));
+                if out.iter().any(|&(x, _)| x as usize == s) {
+                    return;
                 }
+                out.push((s as u32, sym.version));
                 if sym.kind == crate::symbols::SymKind::Expression {
                     if let Some(x) = sym.expr.as_deref() {
-                        if sym.flags & crate::symbols::INEVAL == 0 {
-                            self.collect_deps(x, out);
-                        }
+                        self.collect_deps(x, out);
                     }
                 }
             }
-            Expr::Un(_, l) => self.collect_deps(l, out),
+            Expr::Un(_, l) | Expr::Chain(l, _) => self.collect_deps(l, out),
             Expr::Bin(_, l, r) => {
                 self.collect_deps(l, out);
                 self.collect_deps(r, out);

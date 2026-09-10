@@ -477,11 +477,40 @@ impl Assembler {
                 let ot = self.m68k_data_operand(size);
                 match self.parse_operand(opstart, s - opstart, ot) {
                     Some(op) => {
-                        let mut a = Atom::datadef(opsz_bits(size), op);
-                        if !self.align_data {
-                            a.align = 1;
+                        // Fast path: a constant integer operand in range becomes
+                        // bytes appended to the current line's data atom. Same
+                        // bytes, same alignment (1), no relocation, no error path.
+                        let bits = opsz_bits(size);
+                        let merged = if !self.align_data && size == bits && matches!(bits, 8 | 16 | 32) {
+                            match op.value[0].as_deref() {
+                                Some(Expr::Num(v)) => {
+                                    let v = *v;
+                                    let ok = match bits {
+                                        8 => !self.cpu.typechk || (v >= -0x80 && v <= 0xff),
+                                        16 => !self.cpu.typechk || (v >= -0x8000 && v <= 0xffff),
+                                        _ => true,
+                                    };
+                                    if ok {
+                                        let n = (bits / 8) as usize;
+                                        let b = (v as u32).to_be_bytes();
+                                        self.add_data_merged(&b[4 - n..]);
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                }
+                                _ => false,
+                            }
+                        } else {
+                            false
+                        };
+                        if !merged {
+                            let mut a = Atom::datadef(bits, op);
+                            if !self.align_data {
+                                a.align = 1;
+                            }
+                            self.add_atom(a);
                         }
-                        self.add_atom(a);
                     }
                     None => self.syntax_error(8, &[]),
                 }

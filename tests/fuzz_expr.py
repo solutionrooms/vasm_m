@@ -67,9 +67,12 @@ def run_one(args):
     src.write_text(text)
     flags = ["-quiet", "-Fbin", "-m68000"] + (["-spaces"] if spaces else [])
     rf, nf = tmp / f"e{idx:04d}.ref", tmp / f"e{idx:04d}.out"
-    r = subprocess.run([str(REF), *flags, "-o", str(rf), str(src)], capture_output=True, text=True)
-    n = subprocess.run([str(NEW), *flags, "-o", str(nf), str(src)], capture_output=True, text=True)
-    if (r.returncode == 0) != (n.returncode == 0):
+    try:
+        r = subprocess.run([str(REF), *flags, "-o", str(rf), str(src)], capture_output=True, text=True, timeout=20)
+        n = subprocess.run([str(NEW), *flags, "-o", str(nf), str(src)], capture_output=True, text=True, timeout=20)
+    except subprocess.TimeoutExpired as e:
+        return f"{src}: timeout {e.cmd[0]}"
+    if not ((r.returncode == 0 and n.returncode == 0) or (r.returncode == 1 and n.returncode == 1)):
         return f"{src}: exit ref={r.returncode} new={n.returncode}\n ref: {r.stderr[:300]}\n new: {n.stderr[:300]}"
     if r.returncode == 0 and rf.read_bytes() != nf.read_bytes():
         rb, nb = rf.read_bytes(), nf.read_bytes()

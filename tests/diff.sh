@@ -21,6 +21,8 @@ COMMON="-quiet -m68000"
 [ -x "$NEW" ] || { echo "vasm_m not built: cargo build --release"; exit 2; }
 rm -rf "$OUT" && mkdir -p "$OUT" || exit 2
 
+# run with a 20 s timeout (exit 124 on timeout, which never matches an expected code)
+run_to() { perl -e 'alarm 20; exec @ARGV' -- "$@"; }
 set -- "$ROOT"/tests/corpus/*.s
 [ -f "$1" ] || { echo "corpus is empty"; exit 2; }
 
@@ -31,8 +33,8 @@ for src in "$@"; do
   negative=0; [ -f "${src%.s}.expect-fail" ] && negative=1
   for fmt in $FORMATS; do
     ref="$OUT/$name.$fmt.ref"; new="$OUT/$name.$fmt.out"
-    "$REF" $COMMON -F$fmt $flags -o "$ref" "$src" >"$ref.log" 2>&1; rs=$?
-    "$NEW" $COMMON -F$fmt $flags -o "$new" "$src" >"$new.log" 2>&1; ns=$?
+    run_to "$REF" $COMMON -F$fmt $flags -o "$ref" "$src" >"$ref.log" 2>&1; rs=$?
+    run_to "$NEW" $COMMON -F$fmt $flags -o "$new" "$src" >"$new.log" 2>&1; ns=$?
     if [ $negative -eq 1 ]; then
       if [ $rs -ne 1 ]; then
         echo "FAIL $name [$fmt]: negative case but reference exited $rs (expected 1)"; fail=$((fail+1))
