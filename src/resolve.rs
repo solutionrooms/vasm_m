@@ -15,6 +15,37 @@ impl Assembler {
     fn resolve_section(&mut self, sec: usize) {
         let mut fastphase = FASTOPTPHASE;
         let mut pass = 0;
+        // Precompute runs of constant-size data atoms (DATA/DATADEF, align 1):
+        // runs[i] = number of atoms in the run starting at i (0 if not a run start),
+        // run_bytes[i] = their total size.
+        let (runs, run_bytes) = {
+            let atoms = &self.sections[sec].atoms;
+            let n = atoms.len();
+            let mut runs = vec![0usize; n];
+            let mut run_bytes = vec![0usize; n];
+            let fixed = |a: &Atom| a.align == 1 && matches!(a.kind, AtomKind::Data(_) | AtomKind::DataDef(_));
+            let mut i = 0;
+            while i < n {
+                if fixed(&atoms[i]) {
+                    let mut j = i;
+                    let mut bytes = 0usize;
+                    while j < n && fixed(&atoms[j]) {
+                        bytes += match &atoms[j].kind {
+                            AtomKind::Data(db) => db.data.len(),
+                            AtomKind::DataDef(dd) => ((dd.bitsize + 7) / 8) as usize,
+                            _ => 0,
+                        };
+                        j += 1;
+                    }
+                    runs[i] = j - i;
+                    run_bytes[i] = bytes;
+                    i = j;
+                } else {
+                    i += 1;
+                }
+            }
+            (runs, run_bytes)
+        };
         loop {
             let mut done = true;
             let mut rorg_pc: Taddr = 0;
@@ -28,7 +59,19 @@ impl Assembler {
             let mut extrapass = pass <= fastphase;
             self.sections[sec].pc = self.sections[sec].org;
             let mut atoms = std::mem::take(&mut self.sections[sec].atoms);
-            for a in atoms.iter_mut() {
+            let n = atoms.len();
+            let mut i = 0;
+            while i < n {
+                // Fast path: a run of fixed-size, unaligned data atoms contributes
+                // a constant number of bytes and has no side effects on a pass.
+                if runs[i] > 1 {
+                    let s = &mut self.sections[sec];
+                    s.pc = s.pc.wrapping_add(run_bytes[i] as Taddr);
+                    i += runs[i];
+                    continue;
+                }
+                let a = &mut atoms[i];
+                i += 1;
                 let pc = pcalign(a, self.sections[sec].pc);
                 self.sections[sec].pc = pc;
                 self.cur_src = a.src;

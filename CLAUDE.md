@@ -53,5 +53,19 @@ A modern, multithreaded reimplementation of `vasmm68k_mot` in Rust. Output must 
 - `examples/` — the real-world example project (to be added).
 
 ## Workflow
-- `cargo build --release && tests/diff.sh` is the acceptance test. Any diff is a bug.
+- `cargo build --release && tests/diff.sh && tests/cubedroid.sh` is the acceptance test
+  (`python3 tests/diff.py --cubedroid` is the cross-platform equivalent). Any diff is a bug.
 - Add a corpus file for every encoder/directive feature as it's implemented.
+- Debug env vars: `VASM_M_TIMING=1` (phase times, memo hit/miss, pass counts),
+  `VASM_M_SYMS=1` (symbol dump), `VASM_M_PARSE_ONLY=1`.
+- `cargo check --target x86_64-pc-windows-msvc` must stay clean: Windows x86-64
+  (Jon's laptop, on battery, vasm ~0.5 s there) is a first-class target.
+
+## Performance notes (2026-09-10, CubeDroid on M-series)
+- vasm 1.7h 0.61 s; vasm_m 0.14 s single-threaded. Wins came from: memoised
+  instruction sizes keyed on symbol versions (`atoms.rs`), flattening `(X±a)±b`
+  constant chains in `simplify_expr` (SET chains grew 221-deep trees, as in vasm),
+  skipping runs of constant-size data atoms in the pass loop.
+- Resolve takes 49 passes on CubeDroid, same algorithm as vasm (fast phase). Pass
+  order is semantically significant (label pcs update mid-pass), so any threading
+  of resolve must be validated against the sequential result.

@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+"""Cross-platform differential test (mirrors tests/diff.sh and tests/cubedroid.sh).
+
+Usage:  python3 tests/diff.py [--ref PATH] [--new PATH] [--formats bin] [--cubedroid] [--corpus-only]
+
+Positive corpus cases (tests/corpus/NAME.s) must exit 0 on both assemblers and
+produce identical bytes; negative cases (NAME.expect-fail present) must exit 1 on
+both. NAME.flags adds flags to both. Exit status is non-zero on any failure.
+"""
+import argparse, os, subprocess, sys, time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+IS_WIN = os.name == "nt"
+EXE = ".exe" if IS_WIN else ""
+
+def run(cmd, cwd=None):
+    t0 = time.perf_counter()
+    p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    return p.returncode, p.stdout + p.stderr, time.perf_counter() - t0
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--ref", default=str(ROOT / "vasm-1.7h" / ("vasmm68k_mot" + EXE)))
+    ap.add_argument("--new", default=str(ROOT / "target" / "release" / ("vasm_m" + EXE)))
+    ap.add_argument("--formats", default="bin")
+    ap.add_argument("--out", default=str(ROOT / "target" / "diff"))
+    ap.add_argument("--cubedroid", action="store_true", help="also run the full-ROM gate")
+    ap.add_argument("--corpus-only", action="store_true")
+    a = ap.parse_args()
+    ref, new = Path(a.ref), Path(a.new)
+    if not ref.is_file():
+        sys.exit(f"reference vasm not built: {ref}")
+    if not new.is_file():
+        sys.exit(f"vasm_m not built: {new} (cargo build --release)")
+    out = Path(a.out)
+    if out.exists():
+        for f in out.iterdir():
+            f.unlink()
+    out.mkdir(parents=True, exist_ok=True)
+    common = ["-quiet", "-m68000"]
+    srcs = sorted((ROOT / "tests" / "corpus").glob("*.s"))
+    if not srcs:
+        sys.exit("corpus is empty")
+    passed = failed = 0
+    for src in srcs:
+        name = src.stem
+        flags_file = src.with_suffix(".flags")
+        flags = flags_file.read_text().split() if flags_file.exists() else []
+        negative = src.with_suffix(".expect-fail").exists()
+        for fmt in a.formats.split():
+            rf, nf = out / f"{name}.{fmt}.ref", out / f"{name}.{fmt}.out"
+            rs, rlog, _ = run([str(ref), *common, f"-F{fmt}", *flags, "-o", str(rf), str(src)])
+            ns, nlog, _ = run([str(new), *common, f"-F{fmt}", *flags, "-o", str(nf), str(src)])
+            ok = True
+            if negative:
+                if rs != 1:
+                    print(f"FAIL {name} [{fmt}]: negative case but reference exited {rs}"); ok = False
+                elif ns != 1:
+                    print(f"FAIL {name} [{fmt}]: vasm_m exited {ns}, expected rejection (1)\n{nlog}"); ok = False
+            else:
+                if rs != 0:
+                    print(f"FAIL {name} [{fmt}]: reference exited {rs} on a positive case\n{rlog}"); ok = False
+                elif ns != 0:
+                    print(f"FAIL {name} [{fmt}]: vasm_m exited {ns}\n{nlog}"); ok = False
+                elif not nf.exists():
+                    print(f"FAIL {name} [{fmt}]: vasm_m produced no output file"); ok = False
+                else:
+                    rb, nb = rf.read_bytes(), nf.read_bytes()
+                    if rb != nb:
+                        first = next((i for i, (x, y) in enumerate(zip(rb, nb)) if x != y), min(len(rb), len(nb)))
+                        print(f"FAIL {name} [{fmt}]: bytes differ ({len(rb)} vs {len(nb)}), first at offset {first:#x}"); ok = False
+            if ok: passed += 1
+            else: failed += 1
+    print(f"pass={passed} fail={failed}")
+    if a.cubedroid and not a.corpus_only:
+        proj = ROOT / "AssemblyTest" / "CubeDroid"
+        rf, nf = out / "cubedroid.ref.bin", out / "cubedroid.new.bin"
+        rs, rlog, rt = run([str(ref), "-quiet", "-Fbin", "-spaces", "-o", str(rf), "SourceCode/stub.X68"], cwd=proj)
+        ns, nlog, nt = run([str(new), "-quiet", "-Fbin", "-spaces", "-o", str(nf), "SourceCode/stub.X68"], cwd=proj)
+        print(f"cubedroid: ref exit={rs} {rt:.3f}s  new exit={ns} {nt:.3f}s")
+        if rs != 0:
+            print("FAIL: reference failed\n" + rlog); failed += 1
+        elif ns != 0:
+            print("FAIL: vasm_m failed\n" + nlog); failed += 1
+        elif rf.read_bytes() != nf.read_bytes():
+            rb, nb = rf.read_bytes(), nf.read_bytes()
+            first = next((i for i, (x, y) in enumerate(zip(rb, nb)) if x != y), min(len(rb), len(nb)))
+            print(f"FAIL: CubeDroid differs ({len(rb)} vs {len(nb)}), first at offset {first:#x}"); failed += 1
+        else:
+            print(f"PASS: CubeDroid byte-exact ({len(rf.read_bytes())} bytes)")
+    sys.exit(1 if failed else 0)
+
+if __name__ == "__main__":
+    main()
