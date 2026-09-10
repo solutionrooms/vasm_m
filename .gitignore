@@ -14,3 +14,4 @@ AssemblyTest/**/nvram/
 AssemblyTest/**/obj/
 AssemblyTest/**/bin/Debug/
 AssemblyTest/**/tniasm.*
+tests/__pycache__/

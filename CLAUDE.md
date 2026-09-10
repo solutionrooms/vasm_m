@@ -13,6 +13,17 @@ A modern, multithreaded reimplementation of `vasmm68k_mot` in Rust. Output must 
 - CLI: ideally drop-in for vasmm68k_mot flags; not a hard requirement.
 - Comparison standard: byte-exact object output vs reference vasm.
 
+## Current state (keep this section current; detailed log is chat.md)
+- 2026-09-10 end of day, HEAD ≈ `7885291`: byte-exact on CubeDroid (Codex confirmed),
+  corpus 18/18, fuzzers (`tests/fuzz.py`, `fuzz_expr.py`, `fuzz_dir.py`) 0 mismatches.
+  ~0.12 s vs 0.63 s reference, single-threaded.
+- Open: Codex re-review of `19a26fa` (Chain node, cycle guards); hunk output NOT
+  requested by Jon (bin + phase-2 ELF is what he asked for; confirm before building);
+  threading (intra-file measured not to pay; multi-file parallel assembly is the
+  honest option — Jon to decide); Windows runtime verification on Jon's laptop.
+- Exact next action when resuming: read chat.md tail, run
+  `tests/diff.sh && tests/cubedroid.sh`, then act on Codex findings if any.
+
 ## Roles
 - **claude** leads implementation: owns code changes, delivers milestones.
 - **codex** is architect: reviews designs, independently verifies output vs vasm,
