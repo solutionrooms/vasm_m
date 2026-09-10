@@ -140,7 +140,7 @@ class Gen:
     def macro_call(self):
         if not self.macros: return self.macro_def()
         name, nargs = self.r.choice(self.macros)
-        args = [self.r.choice([str(self.r.randint(0, 200)), "$1f", "L1" if self.labels else "7"]) for _ in range(nargs)]
+        args = [self.r.choice([str(self.r.randint(0, 200)), "$1f", "7", "'A'"]) for _ in range(nargs)]
         self.emit(f"\t{name}\t{self.sep().join(args)}")
 
     def rept(self):
