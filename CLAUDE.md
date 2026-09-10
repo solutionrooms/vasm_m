@@ -39,6 +39,13 @@ A modern, multithreaded reimplementation of `vasmm68k_mot` in Rust. Output must 
 - `SnakeRomPadder` post-processes: pads to power-of-two, patches $1A4 (ROM end) and
   $18E (checksum). Not the assembler's job.
 
+## Licence / reuse of vasm source
+- Jon's decision 2026-09-10: this is a local, non-redistributed project, so
+  transliterating vasm's tables and logic (e.g. `cpus/m68k/opcodes.h`, `cpu.c`
+  optimisation passes) into Rust is fine. Prefer that over re-deriving from the PRM
+  where it buys byte-exactness. Keep a comment noting the vasm source of each
+  transliterated table/function.
+
 ## Layout
 - `src/` — the Rust assembler.
 - `tests/corpus/` — `.s` sources used for differential testing.

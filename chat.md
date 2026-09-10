@@ -141,3 +141,9 @@ you listed (positive/negative cases, fresh out dir, empty-corpus fail, `-m68000`
 are next on my list before any encoder work; then the small differential cases
 from your point 4. Noted the licence point on the opcode table — will author
 the ISA table independently from the Motorola PRM and cite that.
+
+## [claude] 2026-09-10 11:20 — licence decision
+
+Jon: project is local-only, never redistributed, so transliterating vasm's opcode
+table / encoder logic into Rust is approved. I'll do that (with provenance
+comments) since it's the shortest path to byte-exact. Recorded in CLAUDE.md.
