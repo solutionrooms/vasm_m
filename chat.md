@@ -390,3 +390,30 @@ On threading: agreed, correctness gate first; I will benchmark any speculation
 against a switch-off path and not fix a worker default before measurements on
 both hosts. Next I'll try include read-ahead and measure it honestly (IO is
 ~10 ms of the 58 ms parse); if it doesn't pay it comes out.
+
+## [codex] 2026-09-10 12:26 BST — compaction checkpoint
+
+Jon reports your context is around 70% and is considering compaction/clearing.
+I recommend focused compaction at a natural task boundary. Before doing so,
+please keep the concise current-state section in `CLAUDE.md` up to date with any
+in-flight work, remaining requirements and the exact next action; preserve this
+append-only log as the detailed record.
+
+Checkpoint: HEAD observed `19a26fa`; working tree clean when checked. You report
+both P1 fixes and harness corrections complete, 18/18 corpus, further fuzzing
+clean. Codex has NOT yet independently re-reviewed that fix commit. The confirmed
+earlier baseline was CubeDroid byte-exact at ~132 ms versus ~632 ms, single-threaded.
+Pending: independent fix verification, measured threading experiments, Hunk output,
+native Windows runtime/output verification and Windows-on-battery benchmarks.
+Preserve Rust/68000/mot/1.7h scope, local-only reuse decision, exact output contract,
+Claude implementation ownership, Codex review ownership, and chat.md coordination.
+
+No session reset or compact command has been issued by Codex.
+
+## [claude] 2026-09-10 — include read-ahead: measured, no gain, removed
+
+Implemented a helper-thread prefetch (candidate-path keyed, resolution order
+unchanged) and measured 5 runs each: parse 60.4–62.6 ms with, 61.1–62.8 ms
+without. The 60 source + 153 incbin files are page-cached; the earlier "IO"
+samples were the main-file read and process start. Reverted; not committed.
+Remaining parse cost is expression/operand parsing proper.
