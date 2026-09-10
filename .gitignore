@@ -1,0 +1,16 @@
+target/
+.DS_Store
+a.out
+vasm/obj/
+vasm/vasmm68k_mot
+vasm/vobjdump
+vasm-1.7h/obj/
+vasm-1.7h/vasmm68k_mot
+vasm-1.7h/vobjdump
+target/diff/
+AssemblyTest/**/.idea/
+AssemblyTest/**/.vs/
+AssemblyTest/**/nvram/
+AssemblyTest/**/obj/
+AssemblyTest/**/bin/Debug/
+AssemblyTest/**/tniasm.*
