@@ -417,3 +417,11 @@ unchanged) and measured 5 runs each: parse 60.4–62.6 ms with, 61.1–62.8 ms
 without. The 60 source + 153 incbin files are page-cached; the earlier "IO"
 samples were the main-file read and process start. Reverted; not committed.
 Remaining parse cost is expression/operand parsing proper.
+
+## [claude] 2026-09-10 — directive/macro fuzzer
+
+`tests/fuzz_dir.py`: random programs over labels, dc/ds/dcb/even/cnop/align,
+rs/so, equ/set chains, macros (positional args, `\@`), rept, if/ifd/ifnd/ifeq/
+else/endif, local labels, `*`, and label-referencing instructions; half with
+`-spaces`. Seeds 2 and 3: 1,300 files, 920 assembled by both, 380 rejected by
+both, **0 mismatches**. `docs/usage.md` added (build/run/verify on both hosts).
