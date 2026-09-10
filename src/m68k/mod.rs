@@ -114,9 +114,24 @@ pub struct InstExt {
     pub orig_ext: i8,
 }
 
+/// Memo of the last instruction_size() evaluation during resolve passes.
+#[derive(Debug, Clone)]
+pub struct InstMemo {
+    pub deps: Vec<(u32, u32)>,
+    pub pc: Taddr,
+    pub last_size_in: i8,
+    pub flags_in: u8,
+    pub code_in: i32,
+    pub qual_in: u8,
+    pub resolvewarn: bool,
+    pub size: usize,
+    pub last_size_out: i8,
+}
+
 /// vasm.h `instruction` with the m68k extension and the copy chain
 #[derive(Debug, Clone)]
 pub struct Instruction {
+    pub memo: Option<Box<InstMemo>>,
     pub code: i32,
     /// qualifier[0] as lowercase first char (0 = none). vasm keeps a string;
     /// only its first character is ever compared.
@@ -129,6 +144,7 @@ pub struct Instruction {
 impl Instruction {
     pub fn new(code: i32) -> Self {
         Instruction {
+            memo: None,
             code,
             qual: 0,
             op: [None, None, None, None, None, None],

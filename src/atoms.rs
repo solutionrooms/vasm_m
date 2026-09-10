@@ -308,12 +308,85 @@ impl Assembler {
         s.atoms.push(a);
     }
 
+    /// instruction_size() with a per-instruction memo. The size is a pure
+    /// function of: the referenced symbols' values, the pc, the instruction's
+    /// own last_size/flags/code/qual state and the section's RESOLVE_WARN flag.
+    fn instruction_size_memo(&mut self, ip: &mut crate::m68k::Instruction, sec: usize, pc: Taddr) -> usize {
+        let resolvewarn = self.sections[sec].flags & RESOLVE_WARN != 0;
+        if let Some(m) = &ip.memo {
+            if m.pc == pc && m.last_size_in == ip.ext.last_size && m.flags_in == ip.ext.flags
+                && m.code_in == ip.code && m.qual_in == ip.qual && m.resolvewarn == resolvewarn
+                && m.deps.iter().all(|&(s, v)| self.symtab.syms[s as usize].version == v)
+            {
+                ip.ext.last_size = m.last_size_out;
+                return m.size;
+            }
+        }
+        let (code_in, qual_in, flags_in, last_in) = (ip.code, ip.qual, ip.ext.flags, ip.ext.last_size);
+        let mut deps: Vec<(u32, u32)> = Vec::new();
+        for o in ip.op.iter().flatten() {
+            for v in o.value.iter().flatten() {
+                self.collect_deps(v, &mut deps);
+            }
+        }
+        let size = self.instruction_size(ip, sec, pc);
+        // key = the pre-call state (what vasm's instruction_size() saw)
+        ip.memo = Some(Box::new(crate::m68k::InstMemo {
+            deps,
+            pc,
+            last_size_in: last_in,
+            flags_in,
+            code_in,
+            qual_in,
+            resolvewarn,
+            size,
+            last_size_out: ip.ext.last_size,
+        }));
+        size
+    }
+
+    /// Collect (symbol, version) pairs referenced by an expression, following
+    /// EXPRESSION symbols. The current-pc dummy is covered by the pc key.
+    fn collect_deps(&self, e: &Expr, out: &mut Vec<(u32, u32)>) {
+        match e {
+            Expr::Sym(s) => {
+                let s = *s;
+                if Some(s) == self.cpc {
+                    return;
+                }
+                let sym = &self.symtab.syms[s];
+                if !out.iter().any(|&(x, _)| x as usize == s) {
+                    out.push((s as u32, sym.version));
+                }
+                if sym.kind == crate::symbols::SymKind::Expression {
+                    if let Some(x) = &sym.expr {
+                        if sym.flags & crate::symbols::INEVAL == 0 {
+                            self.collect_deps(x, out);
+                        }
+                    }
+                }
+            }
+            Expr::Un(_, l) => self.collect_deps(l, out),
+            Expr::Bin(_, l, r) => {
+                self.collect_deps(l, out);
+                self.collect_deps(r, out);
+            }
+            _ => {}
+        }
+    }
+
     /// atom_size()
     pub fn atom_size(&mut self, a: &mut Atom, sec: usize, pc: Taddr) -> usize {
         match &mut a.kind {
             AtomKind::Data(db) => db.data.len(),
             AtomKind::Instruction(ip) => {
-                if ip.code >= 0 { self.instruction_size(ip, sec, pc) } else { 0 }
+                if ip.code < 0 {
+                    0
+                } else if self.final_pass {
+                    self.instruction_size(ip, sec, pc)
+                } else {
+                    self.instruction_size_memo(ip, sec, pc)
+                }
             }
             AtomKind::Space(sb) => self.space_size(sb, sec, pc),
             AtomKind::DataDef(dd) => ((dd.bitsize + 7) / 8) as usize,

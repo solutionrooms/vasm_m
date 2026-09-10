@@ -35,6 +35,8 @@ pub struct Symbol {
     pub sec: Option<usize>,
     pub pc: Taddr,
     pub align: Taddr,
+    /// bumped whenever pc changes during resolve (instruction-size memo key)
+    pub version: u32,
 }
 
 impl Symbol {
@@ -114,6 +116,7 @@ impl Assembler {
             sec: None,
             pc: 0,
             align: 0,
+            version: 0,
         })
     }
 
@@ -142,6 +145,7 @@ impl Assembler {
             s.kind = SymKind::Expression;
             s.sec = None;
             s.expr = Some(tree);
+            s.version = s.version.wrapping_add(1);
             i
         } else {
             self.symtab.add(Symbol {
@@ -153,6 +157,7 @@ impl Assembler {
                 sec: None,
                 pc: 0,
                 align: 0,
+                version: 0,
             })
         }
     }
@@ -184,6 +189,7 @@ impl Assembler {
     pub fn set_internal_abs(&mut self, name: &str, val: Taddr) -> usize {
         let i = self.internal_abs(name);
         self.symtab.syms[i].expr = Some(Expr::Num(val));
+        self.symtab.syms[i].version = self.symtab.syms[i].version.wrapping_add(1);
         i
     }
 
@@ -224,6 +230,7 @@ impl Assembler {
             s.kind = SymKind::LabSym;
             s.sec = Some(sec);
             s.pc = pc;
+            s.version = s.version.wrapping_add(1);
             i
         } else {
             self.symtab.add(Symbol {
@@ -235,6 +242,7 @@ impl Assembler {
                 sec: Some(sec),
                 pc,
                 align: 0,
+                version: 0,
             })
         };
         if !name.starts_with(' ') {

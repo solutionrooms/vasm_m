@@ -65,6 +65,7 @@ impl Assembler {
                         if self.symtab.syms[l].pc != pc {
                             done = false;
                             self.symtab.syms[l].pc = pc;
+                            self.symtab.syms[l].version = self.symtab.syms[l].version.wrapping_add(1);
                         }
                     }
                     _ => {}
@@ -107,6 +108,9 @@ impl Assembler {
                 fastphase += 1;
             }
             if !(self.errs.errors == 0 && !done) {
+                if std::env::var("VASM_M_TIMING").is_ok() {
+                    eprintln!("resolve: section {} took {} passes ({} atoms)", self.sections[sec].name, pass, self.sections[sec].atoms.len());
+                }
                 break;
             }
         }

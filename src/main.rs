@@ -42,18 +42,31 @@ fn main() -> ExitCode {
     for (name, val) in a.opts.defines.clone() {
         a.new_abs(&name, expr::Expr::Num(val as i32));
     }
+    let timing = std::env::var("VASM_M_TIMING").is_ok();
+    let t0 = std::time::Instant::now();
     a.set_input_name(&input);
     a.parse();
+    let t1 = std::time::Instant::now();
     if a.errs.errors == 0 {
         a.resolve();
     }
+    let t2 = std::time::Instant::now();
     if a.errs.errors == 0 {
         a.assemble();
+    }
+    let t3 = std::time::Instant::now();
+    if timing {
+        eprintln!("timing: parse {:?} resolve {:?} assemble {:?}", t1 - t0, t2 - t1, t3 - t2);
     }
     if a.errs.errors == 0 {
         a.undef_syms();
     }
     a.fix_labels();
+    if std::env::var("VASM_M_SYMS").is_ok() {
+        for s in &a.symtab.syms {
+            eprintln!("sym {:?} kind={:?} sec={:?} pc={:#x} ver={}", s.name, s.kind, s.sec, s.pc, s.version);
+        }
+    }
     if a.errs.errors == 0 {
         if !quiet {
             for s in &a.sections {
@@ -64,9 +77,13 @@ fn main() -> ExitCode {
         }
         match a.opts.format {
             cli::OutputFormat::Bin => {
+                let t4 = std::time::Instant::now();
                 let data = a.write_bin();
                 if a.errs.errors == 0 {
                     a.write_output_file(&data);
+                }
+                if timing {
+                    eprintln!("timing: output {:?}", t4.elapsed());
                 }
             }
             _ => {
